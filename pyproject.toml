@@ -38,7 +38,7 @@ test = ["nebulento[dev]"]
 [project.urls]
 Homepage = "https://github.com/OpenJarbas/nebulento"
 
-[project.entry-points."opm.pipeline"]
+[project.entry-points."ovos.pipeline"]
 "ovos-nebulento-pipeline-plugin" = "nebulento.opm:NebulentoPipeline"
 
 [tool.hatch.build.targets.wheel]
