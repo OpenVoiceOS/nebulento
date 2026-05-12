@@ -80,6 +80,9 @@ def compute_metrics(results, cases):
     )
 
 
+_CI_MODE = False
+
+
 def print_report(label, metrics, latencies, train_ms=None):
     s = sorted(latencies)
     print(f"\n{'='*64}")
@@ -109,7 +112,7 @@ def print_report(label, metrics, latencies, train_ms=None):
             if fn or fp:
                 rec = tp / (tp + fn) if (tp + fn) else 0
                 print(f"    {i:<24}  recall={rec:.0%}  fn={fn}  fp={fp}")
-    if metrics['wrong']:
+    if metrics['wrong'] and not _CI_MODE:
         print(f"\n  Mismatches ({len(metrics['wrong'])}):")
         for utt, exp, pred, conf in metrics['wrong']:
             print(f"    [{exp or '—'} → {pred or '—'}] ({conf:.2f})  \"{utt}\"")
@@ -221,6 +224,11 @@ def summary(rows):
 # ── main ───────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    import sys
+    if "--ci" in sys.argv:
+        import benchmark.compare as _self
+        _self._CI_MODE = True
+
     cases   = all_cases()
     match_n = sum(1 for _, e in cases if e is not None)
     print(f"\nDataset : {len(cases)} cases  ({match_n} match, {len(cases)-match_n} no-match)")

@@ -44,7 +44,7 @@ jobs:
             echo "## Benchmark — \`nebulento\`"
             echo ""
             echo "\`\`\`"
-            python benchmark/compare.py
+            python benchmark/compare.py --ci
             echo "\`\`\`"
           } > ${{ github.workspace }}/benchmark_report.md
 
