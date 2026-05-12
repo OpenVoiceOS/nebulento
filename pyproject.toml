@@ -18,6 +18,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+ovos = [
+    "ovos-bus-client",
+    "ovos-config",
+    "ovos-plugin-manager",
+    "ovos-utils",
+    "ovos-workshop",
+    "langcodes",
+]
 benchmark = [
     "padaos",
     "padacioso",
