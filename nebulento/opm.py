@@ -53,7 +53,8 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
 
     def __init__(self, bus: Optional[Union[MessageBusClient, FakeBus]] = None,
                  config: Optional[Dict] = None):
-        super().__init__(config=config or {}, bus=bus)
+        config = config or Configuration().get("intents", {}).get("nebulento", {})
+        super().__init__(config=config, bus=bus)
 
         core_config = Configuration()
         self.lang = standardize_lang_tag(core_config.get("lang", "en-US"))
