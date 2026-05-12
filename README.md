@@ -122,6 +122,15 @@ Nebulento ships as an OVOS pipeline plugin (`ovos-nebulento-pipeline-plugin`).
 }
 ```
 
+## Credits
+
+Originally an experimental research project by [**TigreGoticoLda**](https://tigregotico.pt), polished
+and donated to OpenVoiceOS as part of the NLnet
+[NGI0 Commons Fund](https://nlnet.nl/project/OpenVoiceOS) under grant
+agreement No [101135429](https://cordis.europa.eu/project/id/101135429).
+
+![NGI0 / NLnet](./ngi.png)
+
 ## License
 
 Apache 2.0
