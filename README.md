@@ -125,8 +125,8 @@ Entry point: `nebulento.opm:NebulentoPipeline`
 | Engine | Accuracy | Precision | Recall | F1 | False positives | Median |
 |---|---|---|---|---|---|---|
 | padaos (regex) | 25.4% | **100%** | 18.0% | 0.306 | 0 / 24 | **0.07 ms** |
-| padatious (neural) | 53.4% | 96.9% | 50.4% | 0.663 | 4 / 24 | 1.1 ms |
-| nebulento `token-set-ratio` | 50.4% | 88.3% | **52.5%** | **0.658** | 17 / 24 | 6.3 ms |
+| padatious (neural) | **53.4%** | 96.9% | 50.4% | **0.663** | 4 / 24 | 1.1 ms |
+| nebulento `token-set-ratio` | 50.4% | 88.3% | **52.5%** | 0.658 | 17 / 24 | 6.3 ms |
 | nebulento `damerau-levenshtein` | 38.8% | **100%** | 32.8% | 0.494 | **0 / 24** | 6.8 ms |
 
 ```bash
