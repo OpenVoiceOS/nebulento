@@ -18,16 +18,36 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+ovos = [
+    "ovos-bus-client",
+    "ovos-config",
+    "ovos-plugin-manager",
+    "ovos-utils",
+    "ovos-workshop",
+    "langcodes",
+]
 benchmark = [
     "padaos",
     "padacioso",
+    "fann2==1.0.7",
     "padatious",
 ]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "ovos-bus-client",
+    "ovos-config",
+    "ovos-plugin-manager",
+    "ovos-utils",
+    "ovos-workshop",
+    "langcodes",
+]
+test = ["nebulento[dev]"]
 
 [project.urls]
 Homepage = "https://github.com/OpenJarbas/nebulento"
 
-[project.entry-points."opm.pipeline"]
+[project.entry-points."ovos.pipeline"]
 "ovos-nebulento-pipeline-plugin" = "nebulento.opm:NebulentoPipeline"
 
 [tool.hatch.build.targets.wheel]
