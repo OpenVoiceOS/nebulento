@@ -57,24 +57,18 @@ jobs:
             echo "**Status:** FAIL — benchmark crashed before producing a report; see workflow logs."
           } > ${{ github.workspace }}/benchmark_report.md
 
-      - name: Compose comment body
-        id: report
+      - name: Append workflow link
         if: always()
         run: |
-          {
-            echo "body<<COMMENT_EOF"
-            cat "${{ github.workspace }}/benchmark_report.md"
-            echo ""
-            echo "_Workflow: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})_"
-            echo "COMMENT_EOF"
-          } >> "$GITHUB_OUTPUT"
+          echo "" >> "${{ github.workspace }}/benchmark_report.md"
+          echo "_Workflow: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})_" >> "${{ github.workspace }}/benchmark_report.md"
 
       - name: Post / update PR comment
         if: always() && github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: benchmark
-          message: ${{ steps.report.outputs.body }}
+          path: ${{ github.workspace }}/benchmark_report.md
 
       - name: Fail job if benchmark failed
         if: steps.bench.outcome == 'failure'
