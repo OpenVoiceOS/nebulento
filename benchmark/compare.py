@@ -22,9 +22,9 @@ import statistics
 import logging
 from collections import defaultdict
 
-logging.disable(logging.CRITICAL)
-
 from benchmark.dataset import INTENTS, NO_MATCH_UTTERANCES
+
+logging.disable(logging.CRITICAL)
 
 try:
     from padacioso.bracket_expansion import expand_parentheses, normalize_example, normalize_utterance
@@ -80,43 +80,64 @@ def compute_metrics(results, cases):
     )
 
 
-_CI_MODE = False
+import sys as _sys
+_CI_MODE = "--ci" in _sys.argv
+
+
+def _stats_lines(label, metrics, latencies, train_ms=None):
+    s = sorted(latencies)
+    total = metrics['match_n'] + metrics['nomatch_n']
+    lines = []
+    lines.append(f"{'='*64}")
+    lines.append(f"  {label}")
+    lines.append(f"{'='*64}")
+    if train_ms is not None:
+        lines.append(f"  Train time: {train_ms:.0f} ms")
+    lines.append(f"  Accuracy  : {metrics['accuracy']:.1%}  ({int(metrics['accuracy']*total)}/{total})")
+    lines.append(f"  Precision : {metrics['precision']:.1%}")
+    lines.append(f"  Recall    : {metrics['recall']:.1%}")
+    lines.append(f"  F1        : {metrics['f1']:.3f}")
+    lines.append(f"  FP        : {metrics['fp']} / {metrics['nomatch_n']}  ({metrics['fp']/metrics['nomatch_n']:.0%} of no-match)")
+    lines.append(f"  FN        : {metrics['fn']} / {metrics['match_n']}  ({metrics['fn']/metrics['match_n']:.0%} of match)")
+    lines.append(f"  Latency   : median={statistics.median(latencies):.2f}ms  p95={s[int(len(s)*.95)]:.2f}ms  max={s[-1]:.2f}ms")
+    issues = sorted(set(metrics['per_fn']) | set(metrics['per_fp']))
+    if issues:
+        lines.append("")
+        lines.append("  Per-intent (issues only):")
+        for i in sorted(INTENTS):
+            fn = metrics['per_fn'].get(i, 0)
+            fp = metrics['per_fp'].get(i, 0)
+            tp = metrics['per_tp'].get(i, 0)
+            if fn or fp:
+                rec = tp / (tp + fn) if (tp + fn) else 0
+                lines.append(f"    {i:<24}  recall={rec:.0%}  fn={fn}  fp={fp}")
+    if metrics['wrong']:
+        lines.append("")
+        lines.append(f"  Mismatches ({len(metrics['wrong'])}):")
+        for utt, exp, pred, conf in metrics['wrong']:
+            lines.append(f"    [{exp or chr(8212)} -> {pred or chr(8212)}] ({conf:.2f})  \"{utt}\"")
+    return lines
 
 
 def print_report(label, metrics, latencies, train_ms=None):
-    s = sorted(latencies)
-    print(f"\n{'='*64}")
-    print(f"  {label}")
-    print(f"{'='*64}")
-    if train_ms is not None:
-        print(f"  Train time: {train_ms:.0f} ms")
-    print(f"  Accuracy  : {metrics['accuracy']:.1%}  "
-          f"({int(metrics['accuracy']*( metrics['match_n']+metrics['nomatch_n']))}"
-          f"/{metrics['match_n']+metrics['nomatch_n']})")
-    print(f"  Precision : {metrics['precision']:.1%}")
-    print(f"  Recall    : {metrics['recall']:.1%}")
-    print(f"  F1        : {metrics['f1']:.3f}")
-    print(f"  FP        : {metrics['fp']} / {metrics['nomatch_n']}  "
-          f"({metrics['fp']/metrics['nomatch_n']:.0%} of no-match)")
-    print(f"  FN        : {metrics['fn']} / {metrics['match_n']}  "
-          f"({metrics['fn']/metrics['match_n']:.0%} of match)")
-    print(f"  Latency   : median={statistics.median(latencies):.2f}ms  "
-          f"p95={s[int(len(s)*.95)]:.2f}ms  max={s[-1]:.2f}ms")
-    if not _CI_MODE:
-        issues = sorted(set(metrics['per_fn']) | set(metrics['per_fp']))
-        if issues:
-            print(f"\n  Per-intent (issues only):")
-            for i in sorted(INTENTS):
-                fn = metrics['per_fn'].get(i, 0)
-                fp = metrics['per_fp'].get(i, 0)
-                tp = metrics['per_tp'].get(i, 0)
-                if fn or fp:
-                    rec = tp / (tp + fn) if (tp + fn) else 0
-                    print(f"    {i:<24}  recall={rec:.0%}  fn={fn}  fp={fp}")
-        if metrics['wrong']:
-            print(f"\n  Mismatches ({len(metrics['wrong'])}):")
-            for utt, exp, pred, conf in metrics['wrong']:
-                print(f"    [{exp or '—'} → {pred or '—'}] ({conf:.2f})  \"{utt}\"")
+    lines = _stats_lines(label, metrics, latencies, train_ms)
+    if _CI_MODE:
+        acc = metrics['accuracy']
+        fp  = metrics['fp']
+        med = statistics.median(latencies)
+        print(f"<details>")
+        print(f"<summary><b>{label}</b> &mdash; acc {acc:.1%} &middot; FP {fp} &middot; median {med:.2f}ms</summary>")
+        print()
+        print("```text")
+        for line in lines:
+            print(line)
+        print("```")
+        print()
+        print("</details>")
+        print()
+    else:
+        for line in lines:
+            print(line)
 
 
 # ── engine runners ─────────────────────────────────────────────────────────
@@ -212,24 +233,28 @@ def run_nebulento(cases, strategy_name, threshold=0.5):
 
 def summary(rows):
     """rows: list of (label, metrics, median_lat_ms, mean_lat_ms, train_ms_or_None)"""
-    print(f"\n\n{'─'*84}")
-    print(f"  {'Engine':<36} {'Acc':>6} {'Prec':>6} {'Recall':>7} {'F1':>6}  {'FP':>4}  {'Median':>8}  {'Mean':>8}")
-    print(f"{'─'*84}")
-    for label, m, median_lat, mean_lat, train_ms in rows:
-        print(f"  {label:<36} {m['accuracy']:>5.1%} {m['precision']:>5.1%} "
-              f"{m['recall']:>6.1%} {m['f1']:>5.3f}  {m['fp']:>4}  {median_lat:>6.2f}ms  {mean_lat:>6.2f}ms")
-    print(f"{'─'*84}")
-    print(f"  FP = false positives on no-match | Median/Mean = query latency in ms")
+    if _CI_MODE:
+        print("## Summary\n")
+        print("| Engine | Acc | Prec | Recall | F1 | FP | Median |")
+        print("|---|---|---|---|---|---|---|")
+        for label, m, median_lat, mean_lat, _ in rows:
+            print(f"| {label} | {m['accuracy']:.1%} | {m['precision']:.1%} | {m['recall']:.1%} | {m['f1']:.3f} | {m['fp']} | {median_lat:.2f}ms |")
+        print()
+        print("_FP = false positives on no-match_")
+    else:
+        print(f"\n\n{'─'*84}")
+        print(f"  {'Engine':<36} {'Acc':>6} {'Prec':>6} {'Recall':>7} {'F1':>6}  {'FP':>4}  {'Median':>8}  {'Mean':>8}")
+        print(f"{'─'*84}")
+        for label, m, median_lat, mean_lat, train_ms in rows:
+            print(f"  {label:<36} {m['accuracy']:>5.1%} {m['precision']:>5.1%} "
+                  f"{m['recall']:>6.1%} {m['f1']:>5.3f}  {m['fp']:>4}  {median_lat:>6.2f}ms  {mean_lat:>6.2f}ms")
+        print(f"{'─'*84}")
+        print(f"  FP = false positives on no-match | Median/Mean = query latency in ms")
 
 
 # ── main ───────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    import sys
-    if "--ci" in sys.argv:
-        import benchmark.compare as _self
-        _self._CI_MODE = True
-
     cases   = all_cases()
     match_n = sum(1 for _, e in cases if e is not None)
     print(f"\nDataset : {len(cases)} cases  ({match_n} match, {len(cases)-match_n} no-match)")
