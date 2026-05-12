@@ -23,6 +23,16 @@ benchmark = [
     "padacioso",
     "padatious",
 ]
+test = [
+    "pytest",
+    "pytest-cov",
+    "ovos-bus-client",
+    "ovos-config",
+    "ovos-plugin-manager",
+    "ovos-utils",
+    "ovos-workshop",
+    "langcodes",
+]
 
 [project.urls]
 Homepage = "https://github.com/OpenJarbas/nebulento"
