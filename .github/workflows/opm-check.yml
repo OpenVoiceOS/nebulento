@@ -11,6 +11,7 @@ jobs:
     with:
       python_version: '3.11'
       plugin_type: 'auto'
+      install_extras: 'ovos'
       entry_point: '"ovos-nebulento-pipeline-plugin"'
       opm_require_found: true
       opm_validate_interface: true

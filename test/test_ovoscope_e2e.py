@@ -11,6 +11,7 @@ Intents are registered via the standard `padatious:register_intent` bus event
 import threading
 import time
 import unittest
+from typing import List, Optional
 
 import pytest
 
@@ -38,7 +39,7 @@ _SKILL = "test_skill_nebulento"
 class _E2EBase(unittest.TestCase):
     """Shared setup: spin up MiniCroft with the Nebulento pipeline."""
 
-    extra_config: dict | None = None
+    extra_config: Optional[dict] = None
 
     @classmethod
     def setUpClass(cls):
@@ -92,7 +93,7 @@ class _E2EBase(unittest.TestCase):
         time.sleep(0.1)
 
     def _utterance_msg(self, utterance: str,
-                       session_pipeline: list[str] | None = None) -> Message:
+                       session_pipeline: Optional[List[str]] = None) -> Message:
         ctx = {}
         if session_pipeline is not None:
             sess = Session(session_id="ovoscope-test", pipeline=session_pipeline)
@@ -103,9 +104,9 @@ class _E2EBase(unittest.TestCase):
             context=ctx,
         )
 
-    def _send_and_capture(self, utterance: str, expected_types: list[str],
+    def _send_and_capture(self, utterance: str, expected_types: List[str],
                           timeout: float = 5.0,
-                          session_pipeline: list[str] | None = None) -> Message | None:
+                          session_pipeline: Optional[List[str]] = None) -> Optional[Message]:
         got: list[Message] = []
         done = threading.Event()
         failed = threading.Event()
@@ -133,7 +134,7 @@ class _E2EBase(unittest.TestCase):
         return got[0] if got else None
 
     def _expect_no_match(self, utterance: str, timeout: float = 2.0,
-                         session_pipeline: list[str] | None = None):
+                         session_pipeline: Optional[List[str]] = None):
         failed = threading.Event()
 
         def _on_fail(_msg):
