@@ -29,6 +29,7 @@ ovos = [
 benchmark = [
     "padaos",
     "padacioso",
+    "fann2==1.0.7",
     "padatious",
 ]
 dev = [
