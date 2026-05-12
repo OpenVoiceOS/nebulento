@@ -1,28 +1,12 @@
 # Changelog
 
-## [0.2.0a1](https://github.com/TigreGotico/nebulento/tree/0.2.0a1) (2026-04-22)
+## [0.2.1a1](https://github.com/OpenVoiceOS/nebulento/tree/0.2.1a1) (2026-05-12)
 
-[Full Changelog](https://github.com/TigreGotico/nebulento/compare/0.1.1a1...0.2.0a1)
-
-**Merged pull requests:**
-
-- feat: modernize packaging, port padacioso feature parity, benchmark suite, CI [\#8](https://github.com/TigreGotico/nebulento/pull/8) ([JarbasAl](https://github.com/JarbasAl))
-
-## [0.1.1a1](https://github.com/TigreGotico/nebulento/tree/0.1.1a1) (2025-12-20)
-
-[Full Changelog](https://github.com/TigreGotico/nebulento/compare/0.1.0...0.1.1a1)
+[Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.2.0...0.2.1a1)
 
 **Merged pull requests:**
 
-- Configure Renovate [\#2](https://github.com/TigreGotico/nebulento/pull/2) ([renovate[bot]](https://github.com/apps/renovate))
-
-## [0.1.0](https://github.com/TigreGotico/nebulento/tree/0.1.0) (2024-12-11)
-
-[Full Changelog](https://github.com/TigreGotico/nebulento/compare/0.0.1...0.1.0)
-
-## [0.0.1](https://github.com/TigreGotico/nebulento/tree/0.0.1) (2024-12-10)
-
-[Full Changelog](https://github.com/TigreGotico/nebulento/compare/126f3da87a0f2e125cefe1a00f5c53e74149351a...0.0.1)
+- docs: NLNet credit and pipeline plugin tests [\#10](https://github.com/OpenVoiceOS/nebulento/pull/10) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
