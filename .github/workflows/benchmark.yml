@@ -29,12 +29,13 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y swig libfann-dev python3-dev
+          sudo apt-get install -y swig libfann-dev libfann2 python3-dev
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip uv
-          uv pip install --system -e ".[test,benchmark]"
+          pip install fann2 --no-build-isolation
+          uv pip install --system -e ".[test,benchmark]" --no-build-isolation
 
       - name: Run benchmark
         id: bench
