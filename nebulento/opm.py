@@ -53,7 +53,8 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
 
     def __init__(self, bus: Optional[Union[MessageBusClient, FakeBus]] = None,
                  config: Optional[Dict] = None):
-        config = config or Configuration().get("intents", {}).get("nebulento", {})
+        if config is None:
+            config = Configuration().get("intents", {}).get("nebulento", {})
         super().__init__(config=config, bus=bus)
 
         core_config = Configuration()
