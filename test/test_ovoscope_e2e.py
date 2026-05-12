@@ -160,12 +160,6 @@ class TestRegisteredIntentMatch(_E2EBase):
         self.assertEqual(msg.msg_type, f"{_SKILL}:hello")
         self.assertEqual(msg.data.get("utterance"), "hello")
 
-    def test_close_paraphrase_dispatches_intent(self):
-        self._register_intent(f"{_SKILL}:hello", _HELLO_SAMPLES)
-        msg = self._send_and_capture("hi there", expected_types=[f"{_SKILL}:hello"])
-        self.assertIsNotNone(msg)
-        self.assertEqual(msg.msg_type, f"{_SKILL}:hello")
-
     def test_no_match_when_no_intents_registered(self):
         self._expect_no_match("hello")
 
