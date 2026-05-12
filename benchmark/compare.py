@@ -102,20 +102,21 @@ def print_report(label, metrics, latencies, train_ms=None):
           f"({metrics['fn']/metrics['match_n']:.0%} of match)")
     print(f"  Latency   : median={statistics.median(latencies):.2f}ms  "
           f"p95={s[int(len(s)*.95)]:.2f}ms  max={s[-1]:.2f}ms")
-    issues = sorted(set(metrics['per_fn']) | set(metrics['per_fp']))
-    if issues:
-        print(f"\n  Per-intent (issues only):")
-        for i in sorted(INTENTS):
-            fn = metrics['per_fn'].get(i, 0)
-            fp = metrics['per_fp'].get(i, 0)
-            tp = metrics['per_tp'].get(i, 0)
-            if fn or fp:
-                rec = tp / (tp + fn) if (tp + fn) else 0
-                print(f"    {i:<24}  recall={rec:.0%}  fn={fn}  fp={fp}")
-    if metrics['wrong'] and not _CI_MODE:
-        print(f"\n  Mismatches ({len(metrics['wrong'])}):")
-        for utt, exp, pred, conf in metrics['wrong']:
-            print(f"    [{exp or '—'} → {pred or '—'}] ({conf:.2f})  \"{utt}\"")
+    if not _CI_MODE:
+        issues = sorted(set(metrics['per_fn']) | set(metrics['per_fp']))
+        if issues:
+            print(f"\n  Per-intent (issues only):")
+            for i in sorted(INTENTS):
+                fn = metrics['per_fn'].get(i, 0)
+                fp = metrics['per_fp'].get(i, 0)
+                tp = metrics['per_tp'].get(i, 0)
+                if fn or fp:
+                    rec = tp / (tp + fn) if (tp + fn) else 0
+                    print(f"    {i:<24}  recall={rec:.0%}  fn={fn}  fp={fp}")
+        if metrics['wrong']:
+            print(f"\n  Mismatches ({len(metrics['wrong'])}):")
+            for utt, exp, pred, conf in metrics['wrong']:
+                print(f"    [{exp or '—'} → {pred or '—'}] ({conf:.2f})  \"{utt}\"")
 
 
 # ── engine runners ─────────────────────────────────────────────────────────
