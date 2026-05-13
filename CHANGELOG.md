@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.0a2](https://github.com/OpenVoiceOS/nebulento/tree/0.3.0a2) (2026-05-13)
+
+[Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.3.0a1...0.3.0a2)
+
+**Merged pull requests:**
+
+- Update marocchino/sticky-pull-request-comment action to v3 [\#17](https://github.com/OpenVoiceOS/nebulento/pull/17) ([renovate[bot]](https://github.com/apps/renovate))
+- Update actions/setup-python action to v6 [\#16](https://github.com/OpenVoiceOS/nebulento/pull/16) ([renovate[bot]](https://github.com/apps/renovate))
+- Update actions/checkout action to v6 [\#15](https://github.com/OpenVoiceOS/nebulento/pull/15) ([renovate[bot]](https://github.com/apps/renovate))
+
 ## [0.3.0a1](https://github.com/OpenVoiceOS/nebulento/tree/0.3.0a1) (2026-05-12)
 
 [Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.2.1a1...0.3.0a1)
