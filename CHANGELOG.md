@@ -1,8 +1,20 @@
 # Changelog
 
+## [0.3.0a4](https://github.com/OpenVoiceOS/nebulento/tree/0.3.0a4) (2026-05-13)
+
+[Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.3.0a3...0.3.0a4)
+
+**Merged pull requests:**
+
+- Feat/ovoscope e2e tests [\#21](https://github.com/OpenVoiceOS/nebulento/pull/21) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.3.0a3](https://github.com/OpenVoiceOS/nebulento/tree/0.3.0a3) (2026-05-13)
 
-[Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.3.0a1...0.3.0a3)
+[Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.3.0a2...0.3.0a3)
+
+## [0.3.0a2](https://github.com/OpenVoiceOS/nebulento/tree/0.3.0a2) (2026-05-13)
+
+[Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.3.0a1...0.3.0a2)
 
 **Merged pull requests:**
 
