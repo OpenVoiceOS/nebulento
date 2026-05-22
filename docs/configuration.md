@@ -2,6 +2,8 @@
 
 Nebulento's OVOS pipeline plugin is configured under the `nebulento` key inside `intents` in `mycroft.conf` (`~/.config/mycroft/mycroft.conf`).
 
+The two-stage [`HierarchicalNebulentoPipeline`](hierarchical-matching.md) is configured the same way under the `nebulento_hierarchical` key, and accepts every key below plus `domain_threshold`. The two plugins can run side by side in one OVOS instance.
+
 ---
 
 ## Full Example
@@ -104,6 +106,18 @@ Confidence threshold for `match_low`. This is the lowest tier; matches above thi
 Maximum number of space-separated tokens an utterance may contain. Utterances exceeding this limit are silently dropped before matching. This guards against extremely long inputs (e.g. dictated paragraphs) which would produce meaningless fuzzy scores.
 
 If all utterances in a request exceed `max_words`, `calc_intent` returns `None` and an error is logged.
+
+---
+
+### `domain_threshold` (hierarchical plugin only)
+
+| Property | Value |
+|---|---|
+| Type | `float` |
+| Default | `0.0` |
+| Source | `nebulento/opm.py:284` |
+
+Only read by `HierarchicalNebulentoPipeline` under the `nebulento_hierarchical` key. Minimum confidence the top-level domain classifier must reach for a query to be routed to a domain. When the best domain scores below this value the query is rejected with no intent match. `0.0` (default) disables the gate — every query is routed to its best domain and rejection is left to the `conf_*` tiers. Raising it trades recall for precision. See [Hierarchical Matching](hierarchical-matching.md#off-topic-rejection).
 
 ---
 

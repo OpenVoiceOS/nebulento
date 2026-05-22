@@ -47,7 +47,7 @@ The package ships both a standalone Python library and an OVOS pipeline plugin (
 
 ```
                    ┌─────────────────────────────────────┐
-                   │       DomainIntentContainer          │
+                   │     HierarchicalIntentContainer      │
                    │                                      │
   utterance ──────►│  domain_engine.calc_intent()         │
                    │         │                            │
@@ -65,9 +65,10 @@ The package ships both a standalone Python library and an OVOS pipeline plugin (
 | Class | Purpose | Source |
 |---|---|---|
 | `IntentContainer` | Register intents/entities, score utterances | `nebulento/container.py:17` |
-| `DomainIntentContainer` | Two-level domain→intent matching | `nebulento/domain_engine.py:10` |
+| `HierarchicalIntentContainer` | Two-stage domain→intent matching | `nebulento/hierarchical.py:10` |
 | `MatchStrategy` | Enum of nine fuzzy similarity algorithms | `nebulento/fuzz.py:15` |
 | `NebulentoPipeline` | OVOS pipeline plugin wrapping `IntentContainer` | `nebulento/opm.py:51` |
+| `HierarchicalNebulentoPipeline` | Two-stage pipeline wrapping `HierarchicalIntentContainer` | `nebulento/opm.py:262` |
 | `NebulentoIntent` | Result object returned by the pipeline plugin | `nebulento/opm.py:21` |
 
 ### Utility functions
@@ -92,13 +93,13 @@ The package ships both a standalone Python library and an OVOS pipeline plugin (
 |---|---|
 | [Installation](installation.md) | pip install, from source, optional deps |
 | [Quick Start](quickstart.md) | 5-minute guide: add intent, entity, calc_intent |
-| [Intent API](intent-api.md) | Full `IntentContainer` and `DomainIntentContainer` reference |
+| [Intent API](intent-api.md) | Full `IntentContainer` and `HierarchicalIntentContainer` reference |
 | [Match Strategies](strategies.md) | All nine `MatchStrategy` values: what they measure, when to use |
 | [Template Syntax](template-syntax.md) | Expansion rules, entity slots, padatious compat |
 | [Entity Extraction](entity-extraction.md) | How entity registration and slot filling works |
 | [Normalisation](normalisation.md) | Apostrophe handling, case folding, whitespace |
 | [OVOS Plugin](ovos-plugin.md) | `NebulentoPipeline`: events, config, confidence tiers |
-| [Domain Matching](domain-matching.md) | `DomainIntentContainer` guide |
+| [Hierarchical Matching](hierarchical-matching.md) | `HierarchicalIntentContainer` two-stage guide |
 | [Configuration](configuration.md) | All OVOS plugin config keys |
 | [Benchmark](benchmark.md) | Accuracy table, how to reproduce |
 | [Troubleshooting](troubleshooting.md) | Common issues and solutions |

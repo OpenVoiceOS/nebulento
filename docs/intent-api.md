@@ -329,24 +329,25 @@ Core scoring loop. Yields one result dict per registered intent (excluding suppr
 
 ---
 
-## `DomainIntentContainer`
+## `HierarchicalIntentContainer`
 
-Defined in `nebulento/domain_engine.py:10`.
+Defined in `nebulento/hierarchical.py:10`.
 
-Two-level intent engine: domain classification followed by intent matching. Intents are grouped into named domains. At query time the engine first selects the most likely domain, then runs the domain-specific `IntentContainer`.
+Two-stage intent engine: domain classification followed by intent matching. Intents are grouped into named domains. At query time the engine first selects the most likely domain, then runs the domain-specific `IntentContainer`.
 
-See [Domain Matching](domain-matching.md) for a full guide.
+See [Hierarchical Matching](hierarchical-matching.md) for a full guide.
 
 ### Constructor
 
 ```python
-DomainIntentContainer(
+HierarchicalIntentContainer(
     fuzzy_strategy: MatchStrategy = MatchStrategy.DAMERAU_LEVENSHTEIN_SIMILARITY,
     ignore_case: bool = True,
+    domain_threshold: float = 0.0,
 )
 ```
 
-Both parameters are forwarded to every `IntentContainer` created internally, including `domain_engine`.
+`fuzzy_strategy` and `ignore_case` are forwarded to every `IntentContainer` created internally, including `domain_engine`. `domain_threshold` is the minimum confidence the top-level classifier must reach for a query to be routed at all — below it `calc_intent` returns a no-match. `0.0` (default) disables the gate.
 
 ### Public Attributes
 
@@ -355,6 +356,7 @@ Both parameters are forwarded to every `IntentContainer` created internally, inc
 | `domain_engine` | `IntentContainer` | Top-level classifier mapping queries to domain names. |
 | `domains` | `Dict[str, IntentContainer]` | Per-domain containers keyed by domain name. |
 | `training_data` | `Dict[str, List[str]]` | Raw training samples per domain (accumulated at registration). |
+| `domain_threshold` | `float` | Minimum classifier confidence to route a query; `0.0` disables the gate. |
 
 ---
 
@@ -362,7 +364,7 @@ Both parameters are forwarded to every `IntentContainer` created internally, inc
 
 #### `remove_domain(domain_name)`
 
-`nebulento/domain_engine.py:55`
+`nebulento/hierarchical.py:77`
 
 Remove a domain and all its intents, entities, and training data.
 
@@ -376,9 +378,9 @@ d.remove_domain("media")
 
 #### `register_domain_intent(domain_name, intent_name, intent_samples)`
 
-`nebulento/domain_engine.py:68`
+`nebulento/hierarchical.py:90`
 
-Register an intent inside a domain. Creates the domain's `IntentContainer` on first use. Also accumulates `intent_samples` into `training_data[domain_name]`.
+Register an intent inside a domain. Creates the domain's `IntentContainer` on first use, accumulates `intent_samples` into `training_data[domain_name]`, and retrains the top-level domain classifier — no separate classifier setup is needed.
 
 ```python
 d.register_domain_intent("media", "play", ["play {song}", "put on {song}"])
@@ -395,7 +397,7 @@ d.register_domain_intent("media", "pause", ["pause", "stop the music"])
 
 #### `remove_domain_intent(domain_name, intent_name)`
 
-`nebulento/domain_engine.py:87`
+`nebulento/hierarchical.py:110`
 
 Remove a specific intent from a domain. Silently does nothing if domain or intent does not exist.
 
@@ -405,7 +407,7 @@ Remove a specific intent from a domain. Silently does nothing if domain or inten
 
 #### `register_domain_entity(domain_name, entity_name, entity_samples)`
 
-`nebulento/domain_engine.py:99`
+`nebulento/hierarchical.py:122`
 
 Register an entity inside a domain. Creates the domain's container on first use.
 
@@ -417,7 +419,7 @@ d.register_domain_entity("media", "song", ["jazz", "rock", "blues"])
 
 #### `remove_domain_entity(domain_name, entity_name)`
 
-`nebulento/domain_engine.py:116`
+`nebulento/hierarchical.py:139`
 
 Remove a specific entity from a domain.
 
@@ -427,9 +429,9 @@ Remove a specific entity from a domain.
 
 #### `calc_domain(query) -> MatchResult`
 
-`nebulento/domain_engine.py:128`
+`nebulento/hierarchical.py:151`
 
-Classify `query` into the best-matching domain using `domain_engine.calc_intent`. The `domain_engine` must be trained with representative utterances per domain via `domain_engine.add_intent`.
+Classify `query` into the best-matching domain using `domain_engine.calc_intent`. The `domain_engine` is trained automatically as intents are registered with `register_domain_intent`.
 
 ```python
 match = d.calc_domain("play some jazz")
@@ -440,11 +442,11 @@ print(match["name"])  # 'media'
 
 #### `calc_intent(query, domain=None) -> MatchResult`
 
-`nebulento/domain_engine.py:143`
+`nebulento/hierarchical.py:163`
 
 Return the best-matching intent for `query`.
 
-If `domain` is `None`, the domain is inferred by calling `calc_domain`. If the resolved domain has no registered intents, a no-match result is returned.
+If `domain` is `None`, the domain is inferred by calling `calc_domain`; when that domain scores below `domain_threshold`, a no-match result is returned. If the resolved or supplied domain has no registered intents, a no-match result is returned. Passing `domain` explicitly bypasses both the classifier and the threshold gate.
 
 ```python
 # Auto-infer domain:

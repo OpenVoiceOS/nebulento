@@ -15,7 +15,7 @@ from ovos_utils.fakebus import FakeBus
 from ovos_utils.lang import standardize_lang_tag
 from ovos_utils.log import LOG
 
-from nebulento import IntentContainer, MatchStrategy
+from nebulento import HierarchicalIntentContainer, IntentContainer, MatchStrategy
 
 
 class NebulentoIntent:
@@ -73,12 +73,12 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
         #   "nebulento": {"strategy": "TOKEN_SET_RATIO"}
         strategy_name = self.config.get("strategy", "DAMERAU_LEVENSHTEIN_SIMILARITY")
         try:
-            strategy = MatchStrategy[strategy_name]
+            self.strategy = MatchStrategy[strategy_name]
         except KeyError:
             LOG.warning(f"Unknown nebulento strategy {strategy_name!r}, falling back to DAMERAU_LEVENSHTEIN_SIMILARITY")
-            strategy = MatchStrategy.DAMERAU_LEVENSHTEIN_SIMILARITY
+            self.strategy = MatchStrategy.DAMERAU_LEVENSHTEIN_SIMILARITY
 
-        self.containers = {lang: IntentContainer(fuzzy_strategy=strategy) for lang in langs}
+        self.containers = {lang: self._build_container() for lang in langs}
 
         self.bus.on("padatious:register_intent", self.register_intent)
         self.bus.on("padatious:register_entity", self.register_entity)
@@ -93,6 +93,37 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
     def train(self, message=None):
         """No training required — emit trained signal immediately."""
         self.bus.emit(Message("mycroft.skills.trained"))
+
+    # ── container-shape hooks — overridden by HierarchicalNebulentoPipeline ──
+
+    def _build_container(self) -> IntentContainer:
+        """Create the per-language container instance."""
+        return IntentContainer(fuzzy_strategy=self.strategy)
+
+    def _add_intent(self, container: IntentContainer, name: str,
+                    samples: List[str]) -> None:
+        """Register intent *name* with *samples* on *container*."""
+        container.add_intent(name, samples)
+
+    def _add_entity(self, container: IntentContainer, name: str,
+                    samples: List[str]) -> None:
+        """Register entity *name* with *samples* on *container*."""
+        container.add_entity(name, samples)
+
+    def _remove_intent(self, container: IntentContainer, name: str) -> None:
+        """Remove intent *name* from *container*."""
+        container.remove_intent(name)
+
+    def _remove_entity(self, container: IntentContainer, name: str) -> None:
+        """Remove entity *name* from *container*."""
+        container.remove_entity(name)
+
+    def _remove_skill(self, container: IntentContainer, skill_id: str) -> None:
+        """Remove anything left for *skill_id* after per-intent detach.
+
+        No-op for the flat container — intents and entities are already
+        removed individually by :meth:`handle_detach_skill`.
+        """
 
     # ── confidence-level matchers ──────────────────────────────────────────
 
@@ -142,24 +173,28 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
             return
         name = message.data["name"]
         self.registered_intents.append(name)
+        container = self.containers[lang]
         try:
-            self._register_object(message, "intent", self.containers[lang].add_intent)
+            self._register_object(
+                message, "intent",
+                lambda n, s: self._add_intent(container, n, s))
         except RuntimeError:
             # skill reload — intent already registered, skip silently
-            if name not in self.containers[lang].registered_intents:
-                raise
+            pass
 
     def register_entity(self, message):
         lang = standardize_lang_tag(message.data.get("lang", self.lang))
         if lang not in self.containers:
             return
         self.registered_entities.append(message.data)
+        container = self.containers[lang]
         try:
-            self._register_object(message, "entity", self.containers[lang].add_entity)
+            self._register_object(
+                message, "entity",
+                lambda n, s: self._add_entity(container, n, s))
         except RuntimeError:
-            name = message.data.get("name", "")
-            if name not in self.containers[lang].registered_entities:
-                raise
+            # skill reload — entity already registered, skip silently
+            pass
 
     # ── detach ─────────────────────────────────────────────────────────────
 
@@ -167,11 +202,11 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
         if intent_name in self.registered_intents:
             self.registered_intents.remove(intent_name)
             for container in self.containers.values():
-                container.remove_intent(intent_name)
+                self._remove_intent(container, intent_name)
 
     def _detach_entity(self, name: str, lang: str):
         if lang in self.containers:
-            self.containers[lang].remove_entity(name)
+            self._remove_entity(self.containers[lang], name)
 
     def handle_detach_intent(self, message):
         self._detach_intent(message.data.get("intent_name"))
@@ -184,6 +219,8 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
         for en in self.registered_entities:
             if en["name"].startswith(skill_id_colon):
                 self._detach_entity(en["name"], en.get("lang", self.lang))
+        for container in self.containers.values():
+            self._remove_skill(container, skill_id)
 
     # ── intent calculation ─────────────────────────────────────────────────
 
@@ -220,6 +257,64 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
         self.bus.remove("detach_intent", self.handle_detach_intent)
         self.bus.remove("detach_skill", self.handle_detach_skill)
         self.bus.remove("mycroft.skills.train", self.train)
+
+
+class HierarchicalNebulentoPipeline(NebulentoPipeline):
+    """Hierarchical Nebulento pipeline using two-stage domain routing.
+
+    Same behaviour and bus surface as :class:`NebulentoPipeline` except the
+    per-language container is a :class:`HierarchicalIntentContainer`. Each
+    registered intent is filed under a domain == ``skill_id`` (taken from the
+    intent name's ``<skill_id>:<intent>`` prefix); at match time a top-level
+    classifier picks the domain and only that domain's sub-container resolves
+    the intent. Utterances that match no domain are rejected before any
+    sub-container runs.
+
+    Configuration is read from ``intents.nebulento_hierarchical`` so this plugin
+    can coexist with the flat plugin in the same OVOS instance. Accepts every
+    key the flat plugin does, plus ``domain_threshold`` — the minimum top-level
+    classifier confidence required to route a query (``0.0`` disables the gate).
+    """
+
+    def __init__(self, bus: Optional[Union[MessageBusClient, FakeBus]] = None,
+                 config: Optional[Dict] = None):
+        if config is None:
+            config = Configuration().get("intents", {}).get("nebulento_hierarchical", {})
+        # set before super().__init__ — _build_container() runs inside it
+        self.domain_threshold = (config or {}).get("domain_threshold", 0.0)
+        super().__init__(bus=bus, config=config)
+
+    # ── container-shape hooks ───────────────────────────────────────────────
+
+    @staticmethod
+    def _domain_of(name: str) -> str:
+        """Extract the domain (skill_id) from a ``skill_id:name`` label."""
+        return name.split(":", 1)[0] if ":" in name else name
+
+    def _build_container(self) -> HierarchicalIntentContainer:
+        return HierarchicalIntentContainer(fuzzy_strategy=self.strategy,
+                                           domain_threshold=self.domain_threshold)
+
+    def _add_intent(self, container: HierarchicalIntentContainer, name: str,
+                    samples: List[str]) -> None:
+        container.register_domain_intent(self._domain_of(name), name, samples)
+
+    def _add_entity(self, container: HierarchicalIntentContainer, name: str,
+                    samples: List[str]) -> None:
+        container.register_domain_entity(self._domain_of(name), name, samples)
+
+    def _remove_intent(self, container: HierarchicalIntentContainer,
+                       name: str) -> None:
+        container.remove_domain_intent(self._domain_of(name), name)
+
+    def _remove_entity(self, container: HierarchicalIntentContainer,
+                       name: str) -> None:
+        container.remove_domain_entity(self._domain_of(name), name)
+
+    def _remove_skill(self, container: HierarchicalIntentContainer,
+                      skill_id: str) -> None:
+        # in hierarchical mode the skill_id IS the domain
+        container.remove_domain(skill_id)
 
 
 @lru_cache(maxsize=128)  # covers burst of multiple ASR hypotheses without thrashing

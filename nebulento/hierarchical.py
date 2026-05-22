@@ -1,4 +1,4 @@
-"""Domain-aware intent container for hierarchical intent organisation."""
+"""Hierarchical intent container — two-stage domain routing."""
 
 from collections import defaultdict
 from typing import Dict, List, Optional
@@ -7,26 +7,27 @@ from nebulento.container import IntentContainer, MatchResult
 from nebulento.fuzz import MatchStrategy
 
 
-class DomainIntentContainer:
-    """Two-level intent engine: domain classification followed by intent matching.
+class HierarchicalIntentContainer:
+    """Two-stage intent engine: domain classification followed by intent matching.
 
     Intents are grouped into *domains*.  At query time the engine first selects
-    the most likely domain, then runs the domain-specific intent container to
-    find the best intent within that domain.
+    the most likely domain, then runs that domain's intent container to find the
+    best intent within it.
+
+    The top-level domain classifier is trained automatically: every sample
+    passed to :meth:`register_domain_intent` is also fed to :attr:`domain_engine`
+    under its domain name, so the container works standalone with no manual
+    classifier setup.
 
     Domains can also be selected explicitly, bypassing the top-level classifier.
 
     Example::
 
-        from nebulento import DomainIntentContainer
+        from nebulento import HierarchicalIntentContainer
 
-        d = DomainIntentContainer()
+        d = HierarchicalIntentContainer()
         d.register_domain_intent("media", "play", ["play {song}", "put on {song}"])
         d.register_domain_intent("home",  "lights_on", ["lights on", "turn on the lights"])
-
-        # teach the domain classifier what each domain sounds like
-        d.domain_engine.add_intent("media", ["play music", "next track"])
-        d.domain_engine.add_intent("home",  ["lights on", "thermostat"])
 
         result = d.calc_intent("play some jazz")
         # result["name"] == "play"
@@ -35,12 +36,19 @@ class DomainIntentContainer:
         fuzzy_strategy: Similarity algorithm forwarded to every
             :class:`~nebulento.container.IntentContainer` created internally.
         ignore_case: Case-folding flag forwarded to child containers.
+        domain_threshold: Minimum confidence the top-level classifier must
+            reach for a query to be routed at all.  When the best domain
+            scores below this, :meth:`calc_intent` returns a no-match instead
+            of resolving an intent — this is the off-topic rejection gate.
+            ``0.0`` (default) disables the gate; every query is routed to its
+            best domain.
     """
 
     def __init__(self, fuzzy_strategy: MatchStrategy = MatchStrategy.DAMERAU_LEVENSHTEIN_SIMILARITY,
-                 ignore_case: bool = True) -> None:
+                 ignore_case: bool = True, domain_threshold: float = 0.0) -> None:
         self.fuzzy_strategy = fuzzy_strategy
         self.ignore_case = ignore_case
+        self.domain_threshold = domain_threshold
         #: Top-level classifier that maps free-text queries to a domain name.
         self.domain_engine: IntentContainer = IntentContainer(
             fuzzy_strategy=fuzzy_strategy, ignore_case=ignore_case
@@ -49,6 +57,20 @@ class DomainIntentContainer:
         self.domains: Dict[str, IntentContainer] = {}
         #: Raw training samples accumulated per domain (for inspection / re-training).
         self.training_data: Dict[str, List[str]] = defaultdict(list)
+
+    # ── internal ───────────────────────────────────────────────────────────
+
+    def _retrain_domain_classifier(self, domain_name: str) -> None:
+        """Rebuild the top-level classifier entry for *domain_name*.
+
+        Called after the domain's training samples change so the classifier
+        always reflects the current per-domain corpus.
+        """
+        if domain_name in self.domain_engine.intent_names:
+            self.domain_engine.remove_intent(domain_name)
+        samples = self.training_data.get(domain_name)
+        if samples:
+            self.domain_engine.add_intent(domain_name, samples)
 
     # ── domain management ──────────────────────────────────────────────────
 
@@ -70,7 +92,7 @@ class DomainIntentContainer:
         """Register an intent inside a domain.
 
         Creates the domain's :class:`~nebulento.container.IntentContainer`
-        on first use.
+        on first use and (re)trains the top-level domain classifier.
 
         Args:
             domain_name: Target domain (created if it does not exist).
@@ -83,6 +105,7 @@ class DomainIntentContainer:
             )
         self.domains[domain_name].add_intent(intent_name, intent_samples)
         self.training_data[domain_name] += intent_samples
+        self._retrain_domain_classifier(domain_name)
 
     def remove_domain_intent(self, domain_name: str, intent_name: str) -> None:
         """Remove a specific intent from a domain.
@@ -128,9 +151,6 @@ class DomainIntentContainer:
     def calc_domain(self, query: str) -> MatchResult:
         """Classify *query* into the best-matching domain.
 
-        Uses the top-level :attr:`domain_engine` which should be trained with
-        representative utterances per domain via ``domain_engine.add_intent``.
-
         Args:
             query: Raw utterance to classify.
 
@@ -145,8 +165,10 @@ class DomainIntentContainer:
         """Return the best-matching intent for *query*, optionally within *domain*.
 
         If *domain* is ``None``, the domain is inferred by :meth:`calc_domain`.
-        If the inferred or supplied domain has no registered intents, a no-match
-        result is returned.
+        When the inferred domain scores below :attr:`domain_threshold`, or the
+        inferred/supplied domain has no registered intents, a no-match result
+        is returned.  Passing *domain* explicitly bypasses the classifier and
+        the threshold gate.
 
         Args:
             query: Raw utterance to evaluate.
@@ -157,10 +179,7 @@ class DomainIntentContainer:
             :class:`~nebulento.container.MatchResult` dict.  ``name`` is
             ``None`` when no domain or intent could be matched.
         """
-        resolved_domain: Optional[str] = domain or self.domain_engine.calc_intent(query).get("name")  # type: ignore[assignment]
-        if resolved_domain in self.domains:
-            return self.domains[resolved_domain].calc_intent(query)
-        return {
+        no_match: MatchResult = {
             "best_match": None,
             "conf": 0.0,
             "entities": {},
@@ -170,3 +189,14 @@ class DomainIntentContainer:
             "utterance_remainder": "",
             "name": None,
         }
+
+        resolved_domain: Optional[str] = domain
+        if resolved_domain is None:
+            dom_result = self.domain_engine.calc_intent(query)
+            if float(dom_result.get("conf", 0.0)) < self.domain_threshold:  # type: ignore[arg-type]
+                return no_match
+            resolved_domain = dom_result.get("name")  # type: ignore[assignment]
+
+        if resolved_domain in self.domains:
+            return self.domains[resolved_domain].calc_intent(query)
+        return no_match

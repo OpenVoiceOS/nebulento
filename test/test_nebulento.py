@@ -1,6 +1,6 @@
 import unittest
 
-from nebulento import IntentContainer, DomainIntentContainer, MatchStrategy
+from nebulento import IntentContainer, HierarchicalIntentContainer, MatchStrategy
 
 
 # ── helpers ────────────────────────────────────────────────────────────────
@@ -336,18 +336,21 @@ class TestEdgeCases(unittest.TestCase):
         self.assertEqual({s.name for s in MatchStrategy}, expected)
 
 
-# ── DomainIntentContainer ──────────────────────────────────────────────────
+# ── HierarchicalIntentContainer ────────────────────────────────────────────
 
-class TestDomainIntentContainer(unittest.TestCase):
+class TestHierarchicalIntentContainer(unittest.TestCase):
     def _build(self):
-        d = DomainIntentContainer()
+        d = HierarchicalIntentContainer()
         d.register_domain_intent("media", "play", ["play {song}", "play some music"])
         d.register_domain_intent("media", "pause", ["pause", "stop the music"])
         d.register_domain_intent("home", "lights_on", ["turn on the lights", "lights on"])
         d.register_domain_intent("home", "lights_off", ["turn off the lights", "lights off"])
-        d.domain_engine.add_intent("media", ["play music", "pause music", "next track"])
-        d.domain_engine.add_intent("home", ["lights on", "lights off", "thermostat"])
         return d
+
+    def test_domain_classifier_auto_trained(self):
+        d = self._build()
+        self.assertIn("media", d.domain_engine.intent_names)
+        self.assertIn("home", d.domain_engine.intent_names)
 
     def test_calc_intent_with_explicit_domain(self):
         d = self._build()
@@ -377,32 +380,52 @@ class TestDomainIntentContainer(unittest.TestCase):
         self.assertNotIn("pause", d.domains["media"].registered_intents)
 
     def test_remove_domain_entity(self):
-        d = DomainIntentContainer()
+        d = HierarchicalIntentContainer()
         d.register_domain_intent("media", "play", ["play {song}"])
         d.register_domain_entity("media", "song", ["jazz", "rock"])
         d.remove_domain_entity("media", "song")
         self.assertNotIn("song", d.domains["media"].registered_entities)
 
     def test_register_domain_entity(self):
-        d = DomainIntentContainer()
+        d = HierarchicalIntentContainer()
         d.register_domain_intent("media", "play", ["play {song}"])
         d.register_domain_entity("media", "song", ["jazz", "rock"])
         self.assertIn("song", d.domains["media"].registered_entities)
 
     def test_unknown_domain_returns_none_name(self):
-        d = DomainIntentContainer()
+        d = HierarchicalIntentContainer()
         r = d.calc_intent("hello", domain="nonexistent")
         self.assertIsNone(r["name"])
 
     def test_training_data_accumulates(self):
-        d = DomainIntentContainer()
+        d = HierarchicalIntentContainer()
         d.register_domain_intent("media", "play", ["play music"])
         d.register_domain_intent("media", "stop", ["stop music"])
         self.assertEqual(len(d.training_data["media"]), 2)
 
     def test_no_must_train_attribute(self):
-        d = DomainIntentContainer()
+        d = HierarchicalIntentContainer()
         self.assertFalse(hasattr(d, "must_train"))
+
+    def test_domain_threshold_gates_offtopic(self):
+        # an aggressive gate rejects a query that no domain matches well
+        d = HierarchicalIntentContainer(domain_threshold=0.99)
+        d.register_domain_intent("media", "play", ["play music"])
+        r = d.calc_intent("the weather is nice today")
+        self.assertIsNone(r["name"])
+
+    def test_domain_threshold_zero_routes_everything(self):
+        # default gate (0.0) routes every query to its best domain
+        d = HierarchicalIntentContainer(domain_threshold=0.0)
+        d.register_domain_intent("media", "play", ["play music"])
+        r = d.calc_intent("play music")
+        self.assertEqual(r["name"], "play")
+
+    def test_explicit_domain_bypasses_threshold(self):
+        d = HierarchicalIntentContainer(domain_threshold=0.99)
+        d.register_domain_intent("media", "play", ["play music"])
+        r = d.calc_intent("play music", domain="media")
+        self.assertEqual(r["name"], "play")
 
 
 # ── context gating ────────────────────────────────────────────────────────

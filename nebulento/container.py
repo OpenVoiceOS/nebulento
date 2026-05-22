@@ -33,7 +33,7 @@ class IntentContainer:
     Args:
         fuzzy_strategy: Similarity algorithm used for all matches.
             Defaults to :attr:`~MatchStrategy.DAMERAU_LEVENSHTEIN_SIMILARITY`
-            (zero false positives on the benchmark dataset).
+            (lowest false-positive rate of the fuzzy strategies).
         ignore_case: When ``True`` (default) utterances and templates are
             lowercased before comparison.
     """

@@ -57,10 +57,10 @@ Choose a strategy via `IntentContainer(fuzzy_strategy=MatchStrategy.X)`.
 
 | Strategy | Best for | FP risk |
 |---|---|---|
-| `DAMERAU_LEVENSHTEIN_SIMILARITY` | Spelling errors, zero false positives | Low — **default** |
+| `DAMERAU_LEVENSHTEIN_SIMILARITY` | Spelling errors, lowest false-positive rate | Low — **default** |
+| `RATIO` | Highest recall and F1, fast | High |
 | `TOKEN_SET_RATIO` | Natural phrasing, word-order variation | High |
-| `SIMPLE_RATIO` | General use, balanced recall/precision | Medium |
-| `TOKEN_SORT_RATIO` | Same words, different order | Medium |
+| `TOKEN_SORT_RATIO` | Same words, different order | High |
 | `PARTIAL_RATIO` | Substring presence — avoid for intent gating | Very high |
 
 See [docs/strategies.md](docs/strategies.md) for the full comparison table and benchmark rows.
@@ -105,12 +105,12 @@ Entry point: `nebulento.opm:NebulentoPipeline`
 | Page | Description |
 |---|---|
 | [Quickstart](docs/quickstart.md) | 5-minute guide: intents, entities, strategies |
-| [Intent API](docs/intent-api.md) | Full `IntentContainer` and `DomainIntentContainer` reference |
+| [Intent API](docs/intent-api.md) | Full `IntentContainer` and `HierarchicalIntentContainer` reference |
 | [Match Strategies](docs/strategies.md) | All 9 strategies with benchmark data and decision table |
 | [Template Syntax](docs/template-syntax.md) | `(a\|b)`, `[opt]`, `{slot}`, `:0` padatious syntax, expansion rules |
 | [Entity Extraction](docs/entity-extraction.md) | Registration, confidence boost, result fields |
 | [Normalisation](docs/normalisation.md) | Apostrophes, whitespace, case handling |
-| [Domain Matching](docs/domain-matching.md) | `DomainIntentContainer` two-stage matching |
+| [Hierarchical Matching](docs/hierarchical-matching.md) | `HierarchicalIntentContainer` two-stage matching |
 | [OVOS Pipeline Plugin](docs/ovos-plugin.md) | Bus events, confidence tiers, comparison with Padatious |
 | [Configuration](docs/configuration.md) | All config keys with types, defaults, and effect |
 | [Benchmark](docs/benchmark.md) | Full accuracy results across all strategies |
@@ -120,18 +120,20 @@ Entry point: `nebulento.opm:NebulentoPipeline`
 
 ## Benchmark
 
-268 test cases: 244 natural human utterances across 22 intents, 24 deliberate no-match cases.
+Evaluated on the English subset of [`OpenVoiceOS/intents-for-eval`](https://huggingface.co/datasets/OpenVoiceOS/intents-for-eval) — 1750 test utterances across 50 intents (1700 match, 50 off-topic).
 
 | Engine | Accuracy | Precision | Recall | F1 | False positives | Median |
 |---|---|---|---|---|---|---|
-| padaos (regex) | 25.4% | **100%** | 18.0% | 0.306 | 0 / 24 | **0.07 ms** |
-| padatious (neural) | **53.4%** | 96.9% | 50.4% | **0.663** | 4 / 24 | 1.1 ms |
-| nebulento `token-set-ratio` | 50.4% | 88.3% | **52.5%** | 0.658 | 17 / 24 | 6.3 ms |
-| nebulento `damerau-levenshtein` | 38.8% | **100%** | 32.8% | 0.494 | **0 / 24** | 6.8 ms |
+| padaos (regex) | 51.4% | **99.9%** | 50.0% | 0.666 | **1 / 50** | **0.34 ms** |
+| padatious (neural) | 65.5% | 99.7% | 64.6% | 0.784 | 3 / 50 | 3.3 ms |
+| nebulento `ratio` | **72.9%** | 96.9% | **74.5%** | **0.842** | 40 / 50 | 4.2 ms |
+| nebulento `damerau-levenshtein` | 69.2% | 98.6% | 69.3% | 0.814 | 17 / 50 | 9.4 ms |
 
 ```bash
 python benchmark/compare.py
 ```
+
+See [docs/benchmark.md](docs/benchmark.md) for the full table, all nine strategies, and the hierarchical variant.
 
 ---
 

@@ -12,21 +12,21 @@ container = IntentContainer(fuzzy_strategy=MatchStrategy.TOKEN_SET_RATIO)
 
 ## Benchmark Summary
 
-268 test cases: 244 natural human utterances across 22 intents, plus 24 deliberate no-match cases. Test utterances use contractions, idioms, and indirect phrasing — not template fills.
+Evaluated on the English subset of `OpenVoiceOS/intents-for-eval` — 1750 test utterances across 50 intents (1700 match, 50 off-topic). See [Benchmark](benchmark.md) for the full methodology.
 
 | Strategy | Accuracy | Precision | Recall | F1 | False Positives |
 |---|---|---|---|---|---|
-| `TOKEN_SET_RATIO` | 50.4% | 88.3% | **52.5%** | **0.658** | 17 / 24 |
-| `SIMPLE_RATIO` | 49.6% | 93.6% | 48.0% | 0.634 | 8 / 24 |
-| `RATIO` | 48.5% | 91.4% | 48.0% | 0.629 | 11 / 24 |
-| `TOKEN_SORT_RATIO` | 43.3% | 89.0% | 43.0% | 0.580 | 13 / 24 |
-| `DAMERAU_LEVENSHTEIN_SIMILARITY` | 38.8% | **100%** | 32.8% | 0.494 | **0 / 24** |
-| `PARTIAL_RATIO` | 40.3% | 81.8% | 44.3% | 0.574 | 24 / 24 |
-| `PARTIAL_TOKEN_RATIO` | ≤35% | ≤80% | ≤38% | ≤0.52 | 24 / 24 |
-| `PARTIAL_TOKEN_SORT_RATIO` | ≤35% | ≤80% | ≤38% | ≤0.52 | 24 / 24 |
-| `PARTIAL_TOKEN_SET_RATIO` | ≤35% | ≤80% | ≤38% | ≤0.52 | 24 / 24 |
+| `RATIO` | **72.9%** | 96.9% | **74.5%** | **0.842** | 40 / 50 |
+| `SIMPLE_RATIO` | 72.9% | 96.9% | 74.4% | 0.842 | 40 / 50 |
+| `TOKEN_SORT_RATIO` | 71.1% | 96.9% | 72.6% | 0.830 | 40 / 50 |
+| `TOKEN_SET_RATIO` | 71.1% | 96.6% | 72.8% | 0.830 | 43 / 50 |
+| `DAMERAU_LEVENSHTEIN_SIMILARITY` | 69.2% | **98.6%** | 69.3% | 0.814 | **17 / 50** |
+| `PARTIAL_RATIO` | 64.0% | 95.8% | 65.8% | 0.780 | 49 / 50 |
+| `PARTIAL_TOKEN_SORT_RATIO` | 61.4% | 95.6% | 63.2% | 0.761 | 49 / 50 |
+| `PARTIAL_TOKEN_RATIO` | 49.0% | 94.5% | 50.4% | 0.657 | 50 / 50 |
+| `PARTIAL_TOKEN_SET_RATIO` | 49.0% | 94.5% | 50.4% | 0.657 | 50 / 50 |
 
-Latency: median 5–7 ms per utterance for all nebulento strategies on this dataset size.
+Latency: a few ms per utterance for most strategies; `SIMPLE_RATIO` (difflib) is far slower than `RATIO` for the same accuracy — prefer `RATIO`.
 
 ---
 
@@ -42,7 +42,7 @@ Latency: median 5–7 ms per utterance for all nebulento strategies on this data
 
 **False positive risk:** Medium. Strings sharing many characters (common function words, short strings) can score surprisingly high.
 
-**Benchmark:** Accuracy 49.6%, Precision 93.6%, F1 0.634, 8 / 24 false positives.
+**Benchmark:** Accuracy 72.9%, Precision 96.9%, F1 0.842, 40 / 50 false positives. Tied for the highest F1, but slow (difflib) — `RATIO` gives the same accuracy faster.
 
 ---
 
@@ -56,7 +56,7 @@ Latency: median 5–7 ms per utterance for all nebulento strategies on this data
 
 **False positive risk:** Medium.
 
-**Benchmark:** Accuracy 48.5%, Precision 91.4%, F1 0.629, 11 / 24 false positives.
+**Benchmark:** Accuracy 72.9%, Precision 96.9%, F1 0.842, 40 / 50 false positives. Highest F1, and fast — the recommended general-purpose strategy.
 
 ---
 
@@ -82,7 +82,7 @@ Latency: median 5–7 ms per utterance for all nebulento strategies on this data
 
 **False positive risk:** Medium. Sorting tokens discards word-order information, which helps recall but also means that unrelated short strings with common words can score higher than expected.
 
-**Benchmark:** Accuracy 43.3%, Precision 89.0%, F1 0.580, 13 / 24 false positives.
+**Benchmark:** Accuracy 71.1%, Precision 96.9%, F1 0.830, 40 / 50 false positives.
 
 ---
 
@@ -92,11 +92,11 @@ Latency: median 5–7 ms per utterance for all nebulento strategies on this data
 
 **What it measures:** Splits both strings into token sets. The score is the maximum of several comparisons: the intersection alone, intersection + sorted remainder of each string. Very tolerant of extra or missing words.
 
-**When to use:** When recall is the priority and a downstream confidence gate filters false positives. Achieves the highest recall of all strategies on the benchmark.
+**When to use:** When tolerance to extra or missing words matters and a downstream confidence gate filters false positives. Tolerant of word-order and filler words, at the cost of the highest false-positive count.
 
-**False positive risk:** High. 17 / 24 false positives on the benchmark dataset. Not suitable as a sole gating mechanism without a confidence threshold.
+**False positive risk:** High. 43 / 50 false positives on the benchmark dataset. Not suitable as a sole gating mechanism without a confidence threshold.
 
-**Benchmark:** Accuracy 50.4%, Precision 88.3%, Recall 52.5%, F1 0.658, 17 / 24 false positives. Highest F1 among all strategies.
+**Benchmark:** Accuracy 71.1%, Precision 96.6%, Recall 72.8%, F1 0.830, 43 / 50 false positives.
 
 ---
 
@@ -108,7 +108,7 @@ Latency: median 5–7 ms per utterance for all nebulento strategies on this data
 
 **When to use:** Not recommended for intent classification. The partial approach means almost any short utterance produces a high score against any template.
 
-**False positive risk:** Very high (24 / 24 on the benchmark).
+**False positive risk:** Very high (50 / 50 on the benchmark).
 
 ---
 
@@ -120,7 +120,7 @@ Latency: median 5–7 ms per utterance for all nebulento strategies on this data
 
 **When to use:** Not recommended for intent gating.
 
-**False positive risk:** Very high (24 / 24).
+**False positive risk:** Very high (49 / 50).
 
 ---
 
@@ -132,7 +132,7 @@ Latency: median 5–7 ms per utterance for all nebulento strategies on this data
 
 **When to use:** Not recommended for intent gating.
 
-**False positive risk:** Very high (24 / 24).
+**False positive risk:** Very high (50 / 50).
 
 ---
 
@@ -142,13 +142,13 @@ Latency: median 5–7 ms per utterance for all nebulento strategies on this data
 
 **What it measures:** Edit distance between two strings counting insertions, deletions, substitutions, and transpositions (adjacent character swaps). Normalised to `[0.0, 1.0]` by string length. Transposition awareness means "teh" vs "the" scores higher than with plain Levenshtein.
 
-**When to use:** Production deployments where false positives are unacceptable. This is the default strategy. Handles spelling errors and typos without generating false matches on semantically unrelated utterances.
+**When to use:** Production deployments where false positives matter. This is the default strategy. Handles spelling errors and typos while keeping the lowest false-positive count of any fuzzy strategy.
 
-**False positive risk:** Zero on the benchmark dataset (0 / 24). The only nebulento strategy matching the precision of pure regex engines.
+**False positive risk:** Low. 17 / 50 on the benchmark dataset — far below the other fuzzy strategies (40–50 / 50).
 
-**Benchmark:** Accuracy 38.8%, Precision 100%, Recall 32.8%, F1 0.494, 0 / 24 false positives.
+**Benchmark:** Accuracy 69.2%, Precision 98.6%, Recall 69.3%, F1 0.814, 17 / 50 false positives.
 
-**Note:** The lower recall compared to `TOKEN_SET_RATIO` reflects the nature of the test corpus (natural human phrasing far from template wording). Recall can be improved by adding more diverse training templates rather than switching strategies.
+**Note:** Slightly lower recall and F1 than `RATIO`, traded for roughly half the false positives. Pick `RATIO` for maximum recall, `DAMERAU_LEVENSHTEIN_SIMILARITY` when off-topic rejection matters.
 
 ---
 
