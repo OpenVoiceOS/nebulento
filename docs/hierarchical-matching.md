@@ -1,6 +1,6 @@
-# Domain Matching
+# Hierarchical Matching
 
-`DomainIntentContainer` (`nebulento/domain_engine.py:10`) provides a two-level hierarchical matching architecture. Intents are grouped into named *domains*. Matching proceeds in two stages:
+`HierarchicalIntentContainer` (`nebulento/hierarchical.py:10`) provides a two-stage matching architecture. Intents are grouped into named *domains*. Matching proceeds in two stages:
 
 1. **Domain classification** — the utterance is scored against a top-level `IntentContainer` that represents domains, not individual intents.
 2. **Intent matching** — once a domain is selected, the utterance is scored only against intents registered within that domain.
@@ -23,22 +23,31 @@ domains["media"].calc_intent(query)
 MatchResult with intent name, conf, entities
 ```
 
-This contrasts with `IntentContainer`, which scores the utterance against every registered intent globally. With large intent sets (hundreds of intents across many skills), domain-scoped matching limits the comparison set and can reduce false positive rates.
+This contrasts with `IntentContainer`, which scores the utterance against every registered intent globally. With large intent sets (hundreds of intents across many skills), domain-scoped matching limits the comparison set and isolates each domain's vocabulary.
+
+### Domain vs hierarchical
+
+Two-stage routing is one of two ways to organise intents by topic:
+
+- **Domain (parallel)** — every domain is scored independently and the global best wins. No domain is excluded up front.
+- **Hierarchical (two-stage)** — a top-level classifier picks one domain, and only that domain's intents are scored.
+
+`HierarchicalIntentContainer` is the two-stage variant, named to match Adapt's `HierarchicalIntentDeterminationEngine` and palavreado's `HierarchicalIntentContainer`. nebulento does not ship a separate parallel-Domain container — its flat `IntentContainer` already scores every intent independently, so a parallel-domain grouping would behave identically to it.
 
 ---
 
-## When to Use `DomainIntentContainer`
+## When to Use `HierarchicalIntentContainer`
 
 Use it when:
 
 - You have many intents spanning clearly separable topics (media, home automation, calendar, etc.).
-- You want to reduce cross-domain false positives.
-- The training templates in different domains contain overlapping vocabulary (e.g. "set" appears in both timer and thermostat intents).
+- The training templates in different domains contain overlapping vocabulary (e.g. "set" appears in both timer and thermostat intents) — scoping to one domain stops cross-domain bleed.
+- You want a confidence gate that rejects utterances no domain recognises (see [Off-topic rejection](#off-topic-rejection)).
 
 Avoid it when:
 
 - Intent boundaries do not map cleanly to domains.
-- The domain classifier cannot be trained with representative utterances (it performs poorly with sparse training data).
+- Each domain has too few samples for the top-level classifier to learn from — sparse domains classify poorly.
 - You have fewer than ~10 intents total — the overhead is unnecessary.
 
 ---
@@ -48,9 +57,9 @@ Avoid it when:
 ### 1. Create the container
 
 ```python
-from nebulento import DomainIntentContainer, MatchStrategy
+from nebulento import HierarchicalIntentContainer, MatchStrategy
 
-d = DomainIntentContainer(fuzzy_strategy=MatchStrategy.TOKEN_SET_RATIO)
+d = HierarchicalIntentContainer(fuzzy_strategy=MatchStrategy.TOKEN_SET_RATIO)
 ```
 
 ### 2. Register domain intents
@@ -65,33 +74,13 @@ d.register_domain_intent("home", "lights_off", ["lights off", "turn off the ligh
 d.register_domain_intent("home", "thermostat", ["set thermostat to {temp}", "change temperature to {temp}"])
 ```
 
+The top-level domain classifier is **trained automatically**: every sample passed to `register_domain_intent` is also fed to `domain_engine` under its domain name (`nebulento/hierarchical.py:90`). There is no separate training step — the container works standalone as soon as intents are registered.
+
 ### 3. Register domain entities (optional)
 
 ```python
 d.register_domain_entity("media", "song", ["jazz", "rock", "blues", "classical"])
 d.register_domain_entity("home",  "temp", ["20 degrees", "22 degrees", "18"])
-```
-
-### 4. Train the domain classifier
-
-The `domain_engine` is a plain `IntentContainer` where each intent name is a domain name. You must populate it with representative utterances so the top-level classification works:
-
-```python
-d.domain_engine.add_intent("media", [
-    "play music", "next track", "pause", "put on some jazz",
-    "skip this song", "turn up the volume",
-])
-d.domain_engine.add_intent("home", [
-    "lights on", "thermostat", "lock the door", "turn off the lights",
-    "set temperature", "open the blinds",
-])
-```
-
-The `training_data` attribute accumulates all `intent_samples` passed to `register_domain_intent`. You can use this as a seed for the domain classifier instead of writing separate training data:
-
-```python
-for domain, samples in d.training_data.items():
-    d.domain_engine.add_intent(domain, samples)
 ```
 
 ---
@@ -100,7 +89,7 @@ for domain, samples in d.training_data.items():
 
 ### `calc_intent(query, domain=None)`
 
-`nebulento/domain_engine.py:143`
+`nebulento/hierarchical.py:163`
 
 ```python
 result = d.calc_intent("play some jazz")
@@ -109,7 +98,7 @@ print(result["conf"])     # float in [0, 1]
 print(result["entities"]) # {'song': ['jazz']}
 ```
 
-With explicit domain override (skips domain classification):
+With explicit domain override (skips domain classification and the threshold gate):
 
 ```python
 result = d.calc_intent("turn off the lights", domain="home")
@@ -118,7 +107,7 @@ print(result["name"])  # 'lights_off'
 
 ### `calc_domain(query)`
 
-`nebulento/domain_engine.py:128`
+`nebulento/hierarchical.py:151`
 
 Run only the domain classification step:
 
@@ -130,14 +119,30 @@ print(domain_match["conf"])  # confidence for the domain match
 
 ---
 
+## Off-topic rejection
+
+By default (`domain_threshold=0.0`) every query is routed to its best-scoring domain — there is no rejection at the domain stage, and a confident intent match still depends on the per-intent `conf`.
+
+Set `domain_threshold` to reject utterances no domain recognises well:
+
+```python
+d = HierarchicalIntentContainer(domain_threshold=0.6)
+```
+
+When the top-level classifier's best domain scores below the threshold, `calc_intent` returns a no-match (`name=None`) without resolving any intent. This trades recall for precision — a real command whose domain is misclassified becomes unrecoverable, but off-topic speech that shares words with a domain is filtered out.
+
+The right threshold depends on the `MatchStrategy`: lenient strategies such as `TOKEN_SET_RATIO` score loosely and need a higher gate; strict strategies such as `DAMERAU_LEVENSHTEIN_SIMILARITY` already reject off-topic input via low `conf` and gain little from the gate. See [Benchmark](benchmark.md) for measured precision/recall trade-offs.
+
+---
+
 ## Worked Example
 
 ```python
-from nebulento import DomainIntentContainer, MatchStrategy
+from nebulento import HierarchicalIntentContainer, MatchStrategy
 
-d = DomainIntentContainer(fuzzy_strategy=MatchStrategy.DAMERAU_LEVENSHTEIN_SIMILARITY)
+d = HierarchicalIntentContainer(fuzzy_strategy=MatchStrategy.DAMERAU_LEVENSHTEIN_SIMILARITY)
 
-# Register intents
+# Register intents — the domain classifier is trained automatically
 d.register_domain_intent("media", "play",      ["play {artist}", "put on {artist}"])
 d.register_domain_intent("media", "pause",     ["pause", "stop"])
 d.register_domain_intent("calendar", "add",    ["add event {title}", "schedule {title}"])
@@ -146,10 +151,6 @@ d.register_domain_intent("calendar", "check",  ["what's next", "what do I have t
 # Register entities
 d.register_domain_entity("media",    "artist", ["the beatles", "pink floyd", "bach"])
 d.register_domain_entity("calendar", "title",  ["meeting", "dentist", "lunch"])
-
-# Train domain classifier from accumulated data
-for domain, samples in d.training_data.items():
-    d.domain_engine.add_intent(domain, samples)
 
 # Query
 result = d.calc_intent("put on some pink floyd")
@@ -188,10 +189,10 @@ After removing a domain via `remove_domain`, the domain name is also removed fro
 
 ## Internal Structure
 
-`nebulento/domain_engine.py:40-51`
+`nebulento/hierarchical.py:47-59`
 
 ```
-DomainIntentContainer
+HierarchicalIntentContainer
 ├── domain_engine: IntentContainer       ← top-level classifier
 ├── domains: Dict[str, IntentContainer]  ← per-domain intent containers
 └── training_data: Dict[str, List[str]]  ← raw samples per domain

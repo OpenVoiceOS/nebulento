@@ -4,7 +4,7 @@ from unittest import mock
 
 from ovos_bus_client.message import Message
 
-from nebulento.opm import NebulentoPipeline
+from nebulento.opm import HierarchicalNebulentoPipeline, NebulentoPipeline
 
 
 def _register_intent_msg(name, samples, lang="en-US"):
@@ -173,6 +173,62 @@ class TestNebulentoPipelineWithEntities(unittest.TestCase):
     def test_remove_entity(self):
         self.pipeline._detach_entity("skill:item", "en-US")
         self.assertNotIn("skill:item", self.pipeline.containers["en-US"].registered_entities)
+
+
+class TestHierarchicalNebulentoPipeline(unittest.TestCase):
+    def setUp(self):
+        self.bus = mock.Mock()
+        self.pipeline = HierarchicalNebulentoPipeline(bus=self.bus, config={
+            "conf_high": 0.95, "conf_med": 0.8, "conf_low": 0.5,
+        })
+        self.pipeline.register_intent(_register_intent_msg(
+            "media_skill:PlayIntent",
+            ["play music", "play some music", "put on a song", "start the music"],
+        ))
+        self.pipeline.register_intent(_register_intent_msg(
+            "home_skill:LightsIntent",
+            ["turn on the lights", "lights on", "switch the lights on"],
+        ))
+
+    def test_container_is_hierarchical(self):
+        from nebulento import HierarchicalIntentContainer
+        self.assertIsInstance(self.pipeline.containers["en-US"],
+                              HierarchicalIntentContainer)
+
+    def test_intent_filed_under_domain(self):
+        container = self.pipeline.containers["en-US"]
+        self.assertIn("media_skill", container.domains)
+        self.assertIn("home_skill", container.domains)
+
+    def test_match_routes_to_correct_domain(self):
+        msg = Message("recognizer_loop:utterance",
+                      {"utterances": ["play music"], "lang": "en-US"})
+        result = self.pipeline.match_high(["play music"], "en-US", msg)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.match_type, "media_skill:PlayIntent")
+
+    def test_match_none_on_unrelated(self):
+        msg = Message("recognizer_loop:utterance",
+                      {"utterances": ["what is the capital of france"], "lang": "en-US"})
+        result = self.pipeline.match_high(
+            ["what is the capital of france"], "en-US", msg)
+        self.assertIsNone(result)
+
+    def test_detach_skill_removes_domain(self):
+        self.pipeline.handle_detach_skill(
+            Message("detach_skill", {"skill_id": "media_skill"})
+        )
+        self.assertNotIn("media_skill",
+                         self.pipeline.containers["en-US"].domains)
+
+    def test_detach_intent_removes_match(self):
+        self.pipeline.handle_detach_intent(
+            Message("detach_intent", {"intent_name": "media_skill:PlayIntent"})
+        )
+        msg = Message("recognizer_loop:utterance",
+                      {"utterances": ["play music"], "lang": "en-US"})
+        result = self.pipeline.match_high(["play music"], "en-US", msg)
+        self.assertIsNone(result)
 
 
 if __name__ == "__main__":

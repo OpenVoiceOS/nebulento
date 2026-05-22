@@ -137,5 +137,39 @@ class TestSessionBlacklist(_NebulentoHarness):
         self.expect_no_match("hello", session=sess, timeout=3.0)
 
 
+class _HierarchicalNebulentoHarness(E2EPipelineHarness):
+    """Project-specific harness binding for HierarchicalNebulentoPipeline."""
+
+    PIPELINE_ID = "ovos-nebulento-hierarchical-pipeline-plugin"
+    CONFIG_KEY = "nebulento_hierarchical"
+    PLUGIN_CONFIG = {"strategy": "TOKEN_SET_RATIO"}
+    SKILL_ID = "media_skill_nebulento"
+
+    def _register_intent(self, name, samples):
+        register_padatious_intent(self.bus, name, samples)
+
+
+class TestHierarchicalRouting(_HierarchicalNebulentoHarness):
+    def test_routes_to_correct_domain(self):
+        self._register_intent(f"{self.SKILL_ID}:play", _HELLO_SAMPLES)
+        self._register_intent("home_skill_nebulento:lights_on", _LIGHTS_ON_SAMPLES)
+
+        msg = self.send_and_capture(
+            "turn on the lights",
+            expected_types=["home_skill_nebulento:lights_on"],
+        )
+        self.assertIsNotNone(msg)
+        self.assertEqual(msg.msg_type, "home_skill_nebulento:lights_on")
+        detach_skill(self.bus, "home_skill_nebulento")
+
+    def test_detach_skill_removes_domain(self):
+        self._register_intent(f"{self.SKILL_ID}:hello", _HELLO_SAMPLES)
+        msg = self.send_and_capture("hello", expected_types=[f"{self.SKILL_ID}:hello"])
+        self.assertIsNotNone(msg)
+
+        detach_skill(self.bus, self.SKILL_ID)
+        self.expect_no_match("hello")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,3 +1,3 @@
 from nebulento.container import IntentContainer
-from nebulento.domain_engine import DomainIntentContainer
+from nebulento.hierarchical import HierarchicalIntentContainer
 from nebulento.fuzz import MatchStrategy

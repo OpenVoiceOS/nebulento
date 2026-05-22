@@ -11,9 +11,10 @@ Defined in `pyproject.toml`:
 ```toml
 [project.entry-points."opm.pipeline"]
 "ovos-nebulento-pipeline-plugin" = "nebulento.opm:NebulentoPipeline"
+"ovos-nebulento-hierarchical-pipeline-plugin" = "nebulento.opm:HierarchicalNebulentoPipeline"
 ```
 
-`ovos-plugin-manager` discovers this automatically when nebulento is installed. No manual registration is required.
+`ovos-plugin-manager` discovers these automatically when nebulento is installed. No manual registration is required.
 
 ---
 
@@ -23,9 +24,26 @@ Defined in `pyproject.toml`:
 ConfidenceMatcherPipeline  (ovos-plugin-manager)
         │
         └── NebulentoPipeline
+                │
+                └── HierarchicalNebulentoPipeline
 ```
 
 `ConfidenceMatcherPipeline` provides `match_high`, `match_medium`, and `match_low` at three configurable confidence thresholds, integrating with the OVOS pipeline priority system.
+
+---
+
+## Flat vs hierarchical pipeline
+
+Two plugins are shipped:
+
+| Plugin | Container | Entry point | Config key |
+|---|---|---|---|
+| `NebulentoPipeline` | `IntentContainer` (flat) | `ovos-nebulento-pipeline-plugin` | `nebulento` |
+| `HierarchicalNebulentoPipeline` | `HierarchicalIntentContainer` (two-stage) | `ovos-nebulento-hierarchical-pipeline-plugin` | `nebulento_hierarchical` |
+
+`HierarchicalNebulentoPipeline` (`nebulento/opm.py:262`) is a subclass — it shares every bus handler, the confidence tiers, and the registration surface. The only difference is the container: each registered intent is filed under a domain equal to its `skill_id` (the `<skill_id>:<intent>` prefix), and at match time a top-level classifier picks the domain before the intent is resolved. See [Hierarchical Matching](hierarchical-matching.md).
+
+The two plugins can run side by side in the same OVOS instance — their config keys and entry points are distinct. Use the flat plugin by default; switch to the hierarchical one when you have many skills with lexically distinct vocabulary and want domain-scoped matching or the `domain_threshold` off-topic gate.
 
 ---
 

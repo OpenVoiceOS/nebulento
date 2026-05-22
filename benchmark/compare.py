@@ -1,5 +1,5 @@
 """
-Comparative accuracy + speed benchmark across four intent engines.
+Comparative accuracy + speed benchmark across intent engines.
 
 Engines
 -------
@@ -7,10 +7,12 @@ padaos      – regex-based matcher (same family as padacioso, no fuzz)
 padacioso   – regex-based matcher, fuzz=False
 padacioso   – regex-based matcher, fuzz=True
 padatious   – neural-network matcher (requires training pass)
-nebulento   – fuzzy string matching engine
+nebulento   – fuzzy string matching engine (flat + hierarchical)
 
-All engines use the same training templates and are evaluated on the same
-natural-language test utterances (contractions, idioms, indirect phrasing).
+Every engine here is a template / sample matcher: it trains on example
+sentences, not keyword vocabularies. They are all evaluated on the English
+subset of ``OpenVoiceOS/intents-for-eval`` — training on the ``en-US-templates``
+config, evaluating on the ``en-US-test`` config. See ``benchmark/dataset.py``.
 
 Usage
 -----
@@ -22,7 +24,7 @@ import statistics
 import logging
 from collections import defaultdict
 
-from benchmark.dataset import INTENTS, NO_MATCH_UTTERANCES
+from benchmark.dataset import INTENTS, ENTITIES, NO_MATCH_UTTERANCES
 
 logging.disable(logging.CRITICAL)
 
@@ -145,6 +147,8 @@ def print_report(label, metrics, latencies, train_ms=None):
 def run_padaos(cases):
     import padaos
     c = padaos.IntentContainer()
+    for entity_name, samples in ENTITIES.items():
+        c.add_entity(entity_name, samples)
     for name, data in INTENTS.items():
         # padaos uses the same template syntax as padacioso
         c.add_intent(name, data["train"])
@@ -168,6 +172,8 @@ def run_padaos(cases):
 def run_padacioso(cases, fuzz):
     from padacioso import IntentContainer
     c = IntentContainer(fuzz=fuzz)
+    for entity_name, samples in ENTITIES.items():
+        c.add_entity(entity_name, samples)
     for name, data in INTENTS.items():
         c.add_intent(name, data["train"])
 
@@ -188,6 +194,8 @@ def run_padatious(cases, threshold=0.5):
     from padatious import IntentContainer as PC
     with tempfile.TemporaryDirectory() as d:
         c = PC(cache_dir=d)
+        for entity_name, samples in ENTITIES.items():
+            c.add_entity(entity_name, samples)
         for name, data in INTENTS.items():
             c.add_intent(name, data["train"])
         t0 = time.perf_counter()
@@ -212,6 +220,8 @@ def run_nebulento(cases, strategy_name, threshold=0.5):
     from nebulento.fuzz import MatchStrategy
     strategy = getattr(MatchStrategy, strategy_name)
     c = IntentContainer(fuzzy_strategy=strategy)
+    for entity_name, samples in ENTITIES.items():
+        c.add_entity(entity_name, samples)
     for name, data in INTENTS.items():
         c.add_intent(name, data["train"])
 
@@ -225,6 +235,42 @@ def run_nebulento(cases, strategy_name, threshold=0.5):
 
     m = compute_metrics(results, cases)
     label = f"nebulento  {strategy_name.lower().replace('_', '-')}"
+    print_report(label, m, latencies)
+    return m, statistics.median(latencies), statistics.mean(latencies), None
+
+
+def run_nebulento_hierarchical(cases, strategy_name, threshold=0.5,
+                               domain_threshold=0.5):
+    from nebulento import HierarchicalIntentContainer
+    from nebulento.fuzz import MatchStrategy
+    from benchmark.dataset import DOMAINS
+    strategy = getattr(MatchStrategy, strategy_name)
+    intent_domain = {intent: dom
+                     for dom, intents in DOMAINS.items()
+                     for intent in intents}
+    c = HierarchicalIntentContainer(fuzzy_strategy=strategy,
+                                    domain_threshold=domain_threshold)
+    for name, data in INTENTS.items():
+        c.register_domain_intent(intent_domain[name], name, data["train"])
+    # register each entity in every domain whose intents reference it
+    domain_entities = defaultdict(set)
+    for name, data in INTENTS.items():
+        for entity_name in data["entities"]:
+            domain_entities[intent_domain[name]].add(entity_name)
+    for dom, entity_names in domain_entities.items():
+        for entity_name in entity_names:
+            c.register_domain_entity(dom, entity_name, ENTITIES[entity_name])
+
+    results, latencies = [], []
+    for utt, _ in cases:
+        t0 = time.perf_counter()
+        r  = c.calc_intent(utt)
+        latencies.append((time.perf_counter() - t0) * 1000)
+        predicted = r.get("name") if (r and r.get("conf", 0) >= threshold) else None
+        results.append((predicted, r.get("conf", 0.0) if r else 0.0))
+
+    m = compute_metrics(results, cases)
+    label = f"nebulento-hierarchical  {strategy_name.lower().replace('_', '-')}"
     print_report(label, m, latencies)
     return m, statistics.median(latencies), statistics.mean(latencies), None
 
@@ -257,9 +303,11 @@ def summary(rows):
 if __name__ == "__main__":
     cases   = all_cases()
     match_n = sum(1 for _, e in cases if e is not None)
-    print(f"\nDataset : {len(cases)} cases  ({match_n} match, {len(cases)-match_n} no-match)")
+    from benchmark.dataset import TEST_SPLITS
+    print("\nDataset : OpenVoiceOS/intents-for-eval  (en-US)")
+    print(f"Cases   : {len(cases)}  ({match_n} match, {len(cases)-match_n} no-match)")
     print(f"Intents : {len(INTENTS)}")
-    print(f"Note    : test utterances are natural human phrasing, NOT template fills.")
+    print("Splits  : " + ", ".join(f"{k}={len(v)}" for k, v in TEST_SPLITS.items()))
 
     rows = []
     m, lat, mean_lat, tr = run_padaos(cases)
@@ -278,5 +326,18 @@ if __name__ == "__main__":
     for strategy in MatchStrategy:
         m, lat, mean_lat, tr = run_nebulento(cases, strategy_name=strategy.name, threshold=0.5)
         rows.append((f"nebulento  {strategy.name.lower().replace('_', '-')}", m, lat, mean_lat, tr))
+
+    # two-stage variant — same dataset, intents grouped into domains.
+    # damerau-levenshtein with no gate isolates the cost of misrouting;
+    # token-set-ratio with a 0.7 gate shows the off-topic rejection trade-off.
+    for strategy, domain_threshold in (
+        (MatchStrategy.DAMERAU_LEVENSHTEIN_SIMILARITY, 0.0),
+        (MatchStrategy.TOKEN_SET_RATIO, 0.7),
+    ):
+        m, lat, mean_lat, tr = run_nebulento_hierarchical(
+            cases, strategy_name=strategy.name, threshold=0.5,
+            domain_threshold=domain_threshold)
+        rows.append((f"nebulento-hierarchical  {strategy.name.lower().replace('_', '-')}",
+                     m, lat, mean_lat, tr))
 
     summary(rows)

@@ -126,23 +126,21 @@ result = container.calc_intent("goodbye")
 print(result["name"])  # 'goodbye'
 ```
 
-## 8. Domain-Scoped Matching
+## 8. Hierarchical Matching
 
-For larger sets of intents, use `DomainIntentContainer` to limit the search to a domain:
+For larger sets of intents, use `HierarchicalIntentContainer` to classify the
+domain first and limit the search to that domain's intents:
 
 ```python
-from nebulento import DomainIntentContainer
+from nebulento import HierarchicalIntentContainer
 
-d = DomainIntentContainer()
+d = HierarchicalIntentContainer()
 d.register_domain_intent("media", "play", ["play {song}", "put on {song}"])
 d.register_domain_intent("home",  "lights_on", ["lights on", "turn on the lights"])
 
-# Train the domain classifier
-d.domain_engine.add_intent("media", ["play music", "next song", "pause"])
-d.domain_engine.add_intent("home",  ["lights on", "thermostat", "lock door"])
-
+# the domain classifier is trained automatically — no extra step needed
 result = d.calc_intent("turn on the lights please")
 print(result["name"])  # 'lights_on'
 ```
 
-See [Domain Matching](domain-matching.md) for a detailed guide.
+See [Hierarchical Matching](hierarchical-matching.md) for a detailed guide.

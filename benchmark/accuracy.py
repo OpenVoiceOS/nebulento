@@ -17,12 +17,14 @@ from collections import defaultdict
 
 from nebulento import IntentContainer
 from nebulento.fuzz import MatchStrategy
-from benchmark.dataset import INTENTS, NO_MATCH_UTTERANCES
+from benchmark.dataset import INTENTS, ENTITIES, NO_MATCH_UTTERANCES
 
 
 def build_container(strategy: str = "TOKEN_SET_RATIO") -> IntentContainer:
     fuzzy_strategy = getattr(MatchStrategy, strategy)
     c = IntentContainer(fuzzy_strategy=fuzzy_strategy)
+    for entity_name, samples in ENTITIES.items():
+        c.add_entity(entity_name, samples)
     for intent_name, data in INTENTS.items():
         c.add_intent(intent_name, data["train"])
     return c
