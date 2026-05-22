@@ -1,24 +1,19 @@
 # Benchmark
 
-Nebulento includes a comparative accuracy and speed benchmark in `benchmark/compare.py`.
+Nebulento includes a comparative accuracy and speed benchmark in `benchmark/compare.py`. It runs on two OpenVoiceOS evaluation datasets and reports every engine — and every nebulento `MatchStrategy` — side by side.
 
 ---
 
-## Dataset
+## Datasets
 
-The benchmark runs on the English subset of [`OpenVoiceOS/intents-for-eval`](https://huggingface.co/datasets/OpenVoiceOS/intents-for-eval), loaded from the Hugging Face Hub by `benchmark/dataset.py`. Two of the dataset's configs are used:
+Both datasets are loaded from the Hugging Face Hub by `benchmark/dataset.py`. Each has a `<lang>-templates` config (training templates) and a `<lang>-test` config (labelled evaluation utterances). Every engine in this benchmark is a template / sample matcher, so it trains on `-templates` and is evaluated on `-test`.
 
-- **`en-US-templates`** — 1000 training templates across 50 intents (e.g. `play {song} by {artist}`), each carrying example values for its `{slot}` placeholders.
-- **`en-US-test`** — 1750 labelled evaluation utterances across six splits.
+| Name | Repo | Intents | Test cases | Notes |
+|---|---|---|---|---|
+| `intents-for-eval` | [`OpenVoiceOS/intents-for-eval`](https://huggingface.co/datasets/OpenVoiceOS/intents-for-eval) | 50 | 1750 | Six test splits, including a `far_ood` no-match set |
+| `massive` | [`OpenVoiceOS/massive-templates`](https://huggingface.co/datasets/OpenVoiceOS/massive-templates) | 60 | 2974 | OVOS-templated rebuild of the MASSIVE corpus; one labelled split, no no-match cases |
 
-```
-Dataset : OpenVoiceOS/intents-for-eval  (en-US)
-Cases   : 1750  (1700 match, 50 no-match)
-Intents : 50
-Splits  : template=500, paraphrase=700, near_ood=400, far_ood=50, asr_noise=50, typos=50
-```
-
-The test splits exercise different robustness aspects:
+`intents-for-eval` test splits:
 
 | Split | Cases | What it tests |
 |---|---|---|
@@ -26,54 +21,57 @@ The test splits exercise different robustness aspects:
 | `paraphrase` | 700 | Natural rephrasings — different words, same intent |
 | `near_ood` | 400 | Boundary utterances close to another intent |
 | `far_ood` | 50 | Genuinely off-topic — should match **nothing** |
-| `asr_noise` | 50 | Speech-recognition artefacts (filler words, mishears) |
+| `asr_noise` | 50 | Speech-recognition artefacts |
 | `typos` | 50 | Spelling errors |
 
-`far_ood` is the no-match set; every other split carries a real intent label.
-
-The keyword config (`en-US-keywords`) is for keyword engines (Adapt, palavreado) and is not used here — every engine in this benchmark is a template / sample matcher.
+`massive` has a single labelled `test` split and **no no-match cases** — so on `massive` every engine has zero false positives by construction, and accuracy equals recall.
 
 ### Entities
 
-Each `{slot}` placeholder in the dataset ships with example values. `benchmark/dataset.py` collects them into an `ENTITIES` map and every engine registers them (the equivalent of a padatious `.entity` file) before matching, so slots can be filled and contribute to confidence.
+Each `{slot}` placeholder ships with example values. `benchmark/dataset.py` collects them into an `ENTITIES` map and every engine registers them (the equivalent of a padatious `.entity` file) before matching.
 
 ---
 
 ## Engines Compared
 
-Every engine here is a **template / sample matcher** — it trains on example sentences, not keyword vocabularies — so all of them train on `en-US-templates` and are evaluated on `en-US-test`.
-
 | Engine | Description |
 |---|---|
 | `padaos` | Regex-based exact matcher (no fuzzy) |
-| `padacioso fuzz=False` | Regex-based matcher, no fuzzy |
-| `padacioso fuzz=True` | Regex with rapidfuzz augmentation |
 | `padatious` | Neural network matcher (requires a training pass) |
 | `nebulento <strategy>` | Flat `IntentContainer`, one row per `MatchStrategy` value |
-| `nebulento-hierarchical <strategy>` | Two-stage `HierarchicalIntentContainer` — intents grouped into the dataset's 10 domains |
+| `nebulento-hierarchical <strategy>` | Two-stage `HierarchicalIntentContainer` — intents grouped into the dataset's domains |
 
 ---
 
-## Results Table
+## Results — `intents-for-eval`
+
+1750 cases (1700 match, 50 no-match), 50 intents across 10 domains.
 
 | Engine | Accuracy | Precision | Recall | F1 | FP / 50 | Median lat |
 |---|---|---|---|---|---|---|
-| padaos (regex) | 51.4% | **99.9%** | 50.0% | 0.666 | **1** | **0.34 ms** |
-| padacioso fuzz=False | 55.1% | 99.6% | 54.1% | 0.701 | 4 | 1.06 ms |
-| padacioso fuzz=True | 63.7% | 97.8% | 64.1% | 0.774 | 25 | 135 ms |
-| padatious (neural) | 65.5% | 99.7% | 64.6% | 0.784 | 3 | 3.29 ms |
-| nebulento ratio | **72.9%** | 96.9% | **74.5%** | **0.842** | 40 | 4.15 ms |
-| nebulento simple-ratio | 72.9% | 96.9% | 74.4% | 0.842 | 40 | 78.9 ms |
-| nebulento token-sort-ratio | 71.1% | 96.9% | 72.6% | 0.830 | 40 | 5.49 ms |
-| nebulento token-set-ratio | 71.1% | 96.6% | 72.8% | 0.830 | 43 | 6.19 ms |
-| nebulento damerau-levenshtein | 69.2% | 98.6% | 69.3% | 0.814 | 17 | 9.43 ms |
-| nebulento partial-ratio | 64.0% | 95.8% | 65.8% | 0.780 | 49 | 6.97 ms |
-| nebulento partial-token-sort-ratio | 61.4% | 95.6% | 63.2% | 0.761 | 49 | 9.56 ms |
-| nebulento partial-token-(set\|)-ratio | 49.0% | 94.5% | 50.4% | 0.657 | 50 | ~10 ms |
-| nebulento-hierarchical damerau-levenshtein | 62.8% | 98.4% | 62.7% | 0.766 | 17 | ~9 ms |
-| nebulento-hierarchical token-set-ratio | 55.7% | **98.8%** | 55.0% | 0.707 | **11** | 4.27 ms |
+| padaos (regex) | 51.4% | **99.9%** | 50.0% | 0.666 | **1** | **0.39 ms** |
+| padatious (neural) | 66.1% | 99.7% | 65.2% | 0.789 | 3 | 3.63 ms |
+| nebulento simple-ratio | **72.9%** | 96.9% | 74.4% | **0.842** | 40 | 77.2 ms |
+| nebulento ratio | **72.9%** | 96.9% | **74.5%** | **0.842** | 40 | 4.04 ms |
+| nebulento token-sort-ratio | 71.1% | 96.9% | 72.6% | 0.830 | 40 | 8.59 ms |
+| nebulento token-set-ratio | 71.0% | 96.6% | 72.6% | 0.829 | 43 | 6.48 ms |
+| nebulento damerau-levenshtein | 69.2% | 98.6% | 69.3% | 0.814 | **17** | 10.2 ms |
+| nebulento partial-ratio | 64.0% | 95.8% | 65.8% | 0.780 | 49 | 10.0 ms |
+| nebulento partial-token-sort-ratio | 61.4% | 95.6% | 63.2% | 0.761 | 49 | 9.15 ms |
+| nebulento partial-token-ratio | 44.1% | 93.9% | 45.4% | 0.612 | 50 | 9.48 ms |
+| nebulento partial-token-set-ratio | 44.1% | 93.9% | 45.4% | 0.612 | 50 | 8.89 ms |
+| nebulento-hierarchical damerau-levenshtein | 62.9% | 98.4% | 62.8% | 0.767 | 17 | 8.63 ms |
+| nebulento-hierarchical token-set-ratio | 55.6% | **98.8%** | 54.9% | 0.706 | **11** | 4.49 ms |
 
-FP = false positives on the 50 `far_ood` no-match utterances. Latency varies run-to-run; treat it as an order of magnitude.
+FP = false positives on the 50 `far_ood` no-match utterances. Latency varies run-to-run.
+
+---
+
+## Results — `massive`
+
+2974 cases, 60 intents across 18 domains. The corpus has no no-match cases, so false positives are zero for every engine and accuracy equals recall — this dataset measures recall on a broad, diverse intent set with 13.5k training templates.
+
+Run it with `python benchmark/compare.py massive`. The summary table has the same columns as above; because `massive` has no off-topic split, the `FP` column is zero for every engine and `Accuracy` equals `Recall`.
 
 ---
 
@@ -83,16 +81,23 @@ Install benchmark dependencies:
 
 ```bash
 pip install nebulento[benchmark]
-# installs: padaos, padacioso, padatious, datasets
+# installs: padaos, padatious, datasets
 ```
 
-Run:
+Run both datasets:
 
 ```bash
 python benchmark/compare.py
 ```
 
-The first run downloads the dataset from the Hugging Face Hub (cached afterwards). Padatious requires a training pass; all other engines start immediately.
+Or one at a time:
+
+```bash
+python benchmark/compare.py intents-for-eval
+python benchmark/compare.py massive
+```
+
+The first run downloads each dataset from the Hugging Face Hub (cached afterwards). Padatious requires a training pass; the other engines start immediately.
 
 ---
 
@@ -104,7 +109,7 @@ Source: `compute_metrics` in `benchmark/compare.py`.
 - **Precision** = TP / (TP + FP)
 - **Recall** = TP / total_match_cases
 - **F1** = 2 × precision × recall / (precision + recall)
-- **FP** = number of `far_ood` utterances incorrectly assigned an intent
+- **FP** = no-match utterances incorrectly assigned an intent
 
 A prediction is a TP when the predicted intent name exactly matches the expected intent and `conf >= threshold` (0.5). A no-match case is correct only when the engine returns `None` or a confidence below threshold.
 
@@ -112,23 +117,20 @@ A prediction is a TP when the predicted intent name exactly matches the expected
 
 ## Interpreting the Results
 
-- **nebulento's fuzzy strategies lead on accuracy and recall.** `ratio` and `simple-ratio` reach 72.9% accuracy / 0.842 F1 — ahead of padatious (65.5% / 0.784). The `paraphrase` split rewards fuzzy matching: rephrasings that no regex template covers still score well by string similarity.
-- **The cost is false positives.** The high-recall fuzzy strategies fire on 40+ of the 50 `far_ood` utterances. nebulento's `conf` should be gated by a downstream threshold — that is exactly what the pipeline's `conf_high` / `conf_med` / `conf_low` tiers do.
-- **`damerau-levenshtein` is the most balanced nebulento strategy** — 69.2% accuracy at 17 false positives, the lowest FP count of any fuzzy strategy. It is the library default for this reason.
-- **`partial-*` strategies saturate false positives** (49–50 / 50). They are substring matchers and are not suitable for intent gating.
-- **padaos and padacioso are precise but low-recall** — pure regex cannot match paraphrases it was not given a template for.
-- **padatious (neural)** lands between the regex engines and nebulento: better recall than regex, lower than fuzzy, with the highest precision after padaos.
-- **Latency:** `ratio` is the fast nebulento strategy (~4 ms); `simple-ratio` (difflib-based) is far slower (~79 ms) for identical accuracy — prefer `ratio`. padacioso with fuzz is slowest (~135 ms).
+- **nebulento's fuzzy strategies lead on accuracy and recall.** `ratio` and `simple-ratio` reach 72.9% / 0.842 F1 on `intents-for-eval` — ahead of padatious (66.1%). The `paraphrase` split rewards fuzzy matching: rephrasings no regex template covers still score well by string similarity.
+- **The cost is false positives.** The high-recall fuzzy strategies fire on 40+ of the 50 `far_ood` utterances. nebulento's `conf` should be gated by a downstream threshold — the pipeline's `conf_high` / `conf_med` / `conf_low` tiers do exactly that.
+- **`ratio` is the strategy to use** — identical accuracy to `simple-ratio` at a fraction of the latency (4 ms vs 77 ms). `simple-ratio` is the difflib path and is kept only for reference.
+- **`damerau-levenshtein` is the most balanced strategy** — 69.2% accuracy at 17 false positives, less than half the FP count of the other fuzzy strategies. It is the library default for this reason.
+- **`partial-*` strategies saturate false positives** (49–50 / 50). They are substring matchers, not suitable for intent gating.
+- **padaos and padatious are precise but lower-recall** — regex and neural matchers cannot match paraphrases as broadly as fuzzy string distance.
 
 ---
 
 ## Hierarchical variant
 
-The two-stage `HierarchicalIntentContainer` groups the 50 intents into the 10 domains the dataset already defines, classifies the domain first, then resolves the intent only within it.
+The two-stage `HierarchicalIntentContainer` groups intents into the dataset's domains, classifies the domain first, then resolves the intent only within it.
 
-- **`nebulento-hierarchical damerau-levenshtein`** (no gate, `domain_threshold=0.0`) scores 62.8% vs flat damerau's 69.2%. The drop is the cost of misrouting: the top-level classifier is not perfect, and an utterance routed to the wrong domain can no longer be recovered. False positives are unchanged (17) because the gate is off.
-- **`nebulento-hierarchical token-set-ratio`** (`domain_threshold=0.7`) cuts false positives from 43 to 11 and lifts precision to 98.8%, at a large recall cost (72.8% → 55.0%). The `domain_threshold` gate rejects utterances no domain recognises before any intent is scored.
+- **`nebulento-hierarchical damerau-levenshtein`** (no gate, `domain_threshold=0.0`) scores 62.9% vs flat damerau's 69.2% on `intents-for-eval`. The drop is the cost of misrouting: the top-level classifier is not perfect, and an utterance routed to the wrong domain cannot be recovered. False positives are unchanged (17).
+- **`nebulento-hierarchical token-set-ratio`** (`domain_threshold=0.7`) cuts false positives from 43 to 11 and lifts precision to 98.8%, at a recall cost (72.6% → 54.9%). The `domain_threshold` gate rejects utterances no domain recognises before any intent is scored.
 
-The lesson on this dataset: **two-stage routing is a precision tool, not an accuracy tool.** It helps when off-topic rejection matters more than catching every command, and when your domains are lexically distinct enough for the classifier to route reliably. With 50 intents whose vocabulary overlaps across domains, the misrouting cost is real — the flat engine is the better default. See [Hierarchical Matching](hierarchical-matching.md#off-topic-rejection).
-
-The `domain_threshold` is strategy-dependent: `TOKEN_SET_RATIO` scores loosely and needs a high gate (0.7) before it rejects anything; `DAMERAU_LEVENSHTEIN_SIMILARITY` is strict and its `conf` already does most of the rejecting. With `domain_threshold=0.0` (the default) the hierarchical container routes every query and the only difference from the flat engine is domain-scoped vocabulary isolation.
+Two-stage routing is a **precision tool, not an accuracy tool**: it helps when off-topic rejection matters more than catching every command, and when domains are lexically distinct enough for the classifier to route reliably. With intents whose vocabulary overlaps across domains, the misrouting cost is real — the flat engine is the better default. See [Hierarchical Matching](hierarchical-matching.md#off-topic-rejection).

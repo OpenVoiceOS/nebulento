@@ -349,6 +349,7 @@ class TestHierarchicalIntentContainer(unittest.TestCase):
 
     def test_domain_classifier_auto_trained(self):
         d = self._build()
+        d.calc_domain("anything")  # first query rebuilds the lazy classifier
         self.assertIn("media", d.domain_engine.intent_names)
         self.assertIn("home", d.domain_engine.intent_names)
 

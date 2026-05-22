@@ -120,20 +120,21 @@ Entry point: `nebulento.opm:NebulentoPipeline`
 
 ## Benchmark
 
-Evaluated on the English subset of [`OpenVoiceOS/intents-for-eval`](https://huggingface.co/datasets/OpenVoiceOS/intents-for-eval) — 1750 test utterances across 50 intents (1700 match, 50 off-topic).
+Benchmarked on two OpenVoiceOS datasets — [`intents-for-eval`](https://huggingface.co/datasets/OpenVoiceOS/intents-for-eval) and [`massive`](https://huggingface.co/datasets/OpenVoiceOS/massive-templates). Results below are `intents-for-eval` (1750 utterances, 50 intents, 1700 match / 50 off-topic):
 
 | Engine | Accuracy | Precision | Recall | F1 | False positives | Median |
 |---|---|---|---|---|---|---|
-| padaos (regex) | 51.4% | **99.9%** | 50.0% | 0.666 | **1 / 50** | **0.34 ms** |
-| padatious (neural) | 65.5% | 99.7% | 64.6% | 0.784 | 3 / 50 | 3.3 ms |
-| nebulento `ratio` | **72.9%** | 96.9% | **74.5%** | **0.842** | 40 / 50 | 4.2 ms |
-| nebulento `damerau-levenshtein` | 69.2% | 98.6% | 69.3% | 0.814 | 17 / 50 | 9.4 ms |
+| padaos (regex) | 51.4% | **99.9%** | 50.0% | 0.666 | **1 / 50** | **0.39 ms** |
+| padatious (neural) | 66.1% | 99.7% | 65.2% | 0.789 | 3 / 50 | 3.6 ms |
+| nebulento `ratio` | **72.9%** | 96.9% | **74.5%** | **0.842** | 40 / 50 | 4.0 ms |
+| nebulento `damerau-levenshtein` | 69.2% | 98.6% | 69.3% | 0.814 | 17 / 50 | 10 ms |
 
 ```bash
-python benchmark/compare.py
+python benchmark/compare.py          # both datasets
+python benchmark/compare.py massive  # one dataset
 ```
 
-See [docs/benchmark.md](docs/benchmark.md) for the full table, all nine strategies, and the hierarchical variant.
+See [docs/benchmark.md](docs/benchmark.md) for both datasets, all nine strategies, and the hierarchical variant.
 
 ---
 

@@ -1,53 +1,78 @@
-"""Benchmark dataset — English subset of ``OpenVoiceOS/intents-for-eval``.
+"""Benchmark datasets — loaded from the Hugging Face Hub.
 
-Loaded from the Hugging Face Hub at import time. Two of the dataset's configs
-are used:
+Two OpenVoiceOS evaluation datasets are supported, both shaped the same way:
+a ``<lang>-templates`` config (training templates) and a ``<lang>-test`` config
+(labelled evaluation utterances).
 
-- ``en-US-templates`` — training templates, one row per template, grouped here
-  by ``intent_id``. This is the corpus every template / sample engine trains on
-  (nebulento, padatious, padacioso, padaos).
-- ``en-US-test`` — labelled evaluation utterances across six splits:
-  ``template``, ``paraphrase``, ``near_ood``, ``asr_noise``, ``typos`` carry a
-  real intent label; ``far_ood`` utterances should match nothing.
+- ``intents-for-eval`` — ``OpenVoiceOS/intents-for-eval``. 50 intents, a test
+  set split into ``template`` / ``paraphrase`` / ``near_ood`` / ``asr_noise`` /
+  ``typos`` (labelled) and ``far_ood`` (no-match).
+- ``massive`` — ``OpenVoiceOS/massive-templates``, an OVOS-templated rebuild of
+  the MASSIVE intent corpus. ~60 intents, a single labelled test split, no
+  no-match cases.
 
-The third config, ``en-US-keywords``, holds required/optional keyword vocab for
-keyword engines (Adapt, palavreado) and is intentionally not used here —
-nebulento is a fuzzy template matcher, so it is benchmarked on the templates.
+Every engine in this benchmark is a template / sample matcher, so it trains on
+the ``-templates`` config and is evaluated on the ``-test`` config.
 
-Slots are turned into entities: every ``{slot}`` placeholder in a template
-carries example values in the dataset, and those are collected into ``ENTITIES``
-so engines can register them (the equivalent of a padatious ``.entity`` file)
-and fill the slot at match time.
+Slots are turned into entities: every ``{slot}`` placeholder carries example
+values, collected into ``Bundle.entities`` so engines can register them (the
+equivalent of a padatious ``.entity`` file) and fill the slot at match time.
 
-Exported symbols (kept stable for ``compare.py`` / ``accuracy.py``):
+Usage::
 
-- ``INTENTS``     — ``{intent_id: {"train": [...], "test_match": [...],
-  "entities": [slot_name, ...], "domain": str}}``
-- ``ENTITIES``    — ``{slot_name: [example_value, ...]}`` (union across templates)
-- ``DOMAINS``     — ``{domain: [intent_id, ...]}``
-- ``NO_MATCH_UTTERANCES`` — far-OOD utterances that should not match any intent
-- ``TEST_SPLITS`` — ``{split_name: [(utterance, expected_intent_or_None), ...]}``
+    from benchmark.dataset import load
+    bundle = load("intents-for-eval")        # or "massive"
+    bundle.intents      # {intent_id: {"train", "test_match", "entities", "domain"}}
+    bundle.entities     # {slot_name: [example_value, ...]}
+    bundle.domains      # {domain: [intent_id, ...]}
+    bundle.no_match     # [utterance, ...] that should match nothing
+    bundle.splits       # {split_name: [(utterance, expected_intent_or_None), ...]}
 """
 from collections import defaultdict
+from typing import NamedTuple
 
 from datasets import load_dataset
 
-_REPO = "OpenVoiceOS/intents-for-eval"
-_LANG = "en-US"
+#: short name -> Hugging Face repo id
+DATASETS = {
+    "intents-for-eval": "OpenVoiceOS/intents-for-eval",
+    "massive": "OpenVoiceOS/massive-templates",
+}
 
-#: test splits whose utterances carry a real intent label
-_LABELLED_SPLITS = ("template", "paraphrase", "near_ood", "asr_noise", "typos")
 #: test splits whose utterances should match nothing
 _NOMATCH_SPLITS = ("far_ood",)
 
 
-def _load():
-    templates = load_dataset(_REPO, f"{_LANG}-templates")["train"]
-    test = load_dataset(_REPO, f"{_LANG}-test")["test"]
+class Bundle(NamedTuple):
+    """A loaded benchmark dataset."""
+    name: str
+    repo: str
+    lang: str
+    intents: dict
+    entities: dict
+    domains: dict
+    no_match: list
+    splits: dict
 
-    intents = {}
-    domains = defaultdict(list)
-    entities = defaultdict(list)
+
+def load(name: str = "intents-for-eval", lang: str = "en-US") -> Bundle:
+    """Load a benchmark dataset from the Hugging Face Hub.
+
+    Args:
+        name: One of :data:`DATASETS` (``intents-for-eval`` or ``massive``).
+        lang: BCP-47 language tag — the dataset's config prefix.
+
+    Returns:
+        A :class:`Bundle` with the templates grouped by intent and the test
+        utterances split into matches / no-matches.
+    """
+    repo = DATASETS[name]
+    templates = load_dataset(repo, f"{lang}-templates")["train"]
+    test = load_dataset(repo, f"{lang}-test")["test"]
+
+    intents: dict = {}
+    domains: dict = defaultdict(list)
+    entities: dict = defaultdict(list)
     for row in templates:
         iid = row["intent_id"]
         if iid not in intents:
@@ -57,27 +82,27 @@ def _load():
         if row["template"] not in intents[iid]["train"]:
             intents[iid]["train"].append(row["template"])
         for slot in row["slots"] or []:
-            name = slot["name"]
-            if name not in intents[iid]["entities"]:
-                intents[iid]["entities"].append(name)
+            slot_name = slot["name"]
+            if slot_name not in intents[iid]["entities"]:
+                intents[iid]["entities"].append(slot_name)
             for example in slot["examples"] or []:
-                if example not in entities[name]:
-                    entities[name].append(example)
+                if example not in entities[slot_name]:
+                    entities[slot_name].append(example)
 
-    no_match = []
-    splits = defaultdict(list)
+    no_match: list = []
+    splits: dict = defaultdict(list)
+    has_split = "split" in test.column_names
     for row in test:
         utt = row["utterance"]
         expected = row["expected_intent"] or None
-        if row["split"] in _NOMATCH_SPLITS or expected is None:
+        split = row["split"] if has_split else "test"
+        if split in _NOMATCH_SPLITS or expected is None:
             no_match.append(utt)
-            splits[row["split"]].append((utt, None))
+            splits[split].append((utt, None))
         else:
             if expected in intents:
                 intents[expected]["test_match"].append(utt)
-            splits[row["split"]].append((utt, expected))
+            splits[split].append((utt, expected))
 
-    return intents, dict(entities), dict(domains), no_match, dict(splits)
-
-
-INTENTS, ENTITIES, DOMAINS, NO_MATCH_UTTERANCES, TEST_SPLITS = _load()
+    return Bundle(name, repo, lang, intents, dict(entities), dict(domains),
+                  no_match, dict(splits))
