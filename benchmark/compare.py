@@ -28,6 +28,55 @@ from nebulento.bracket_expansion import normalize_utterance
 
 from benchmark.dataset import DATASETS, load
 
+def fbeta(precision, recall, beta=0.5):
+    """F_β score. β<1 weights precision over recall — appropriate for voice
+    assistants where a false positive (wrong skill fires) is unrecoverable
+    while a false negative falls through to fallback handlers (LLM, etc.).
+    """
+    b2 = beta * beta
+    denom = b2 * precision + recall
+    return ((1 + b2) * precision * recall / denom) if denom else 0.0
+
+
+def recall_at_precision(results_no_thresh, cases, p_floor=0.99, step=0.01):
+    """Sweep the threshold and return the max recall achievable while
+    keeping precision >= ``p_floor`` (and the threshold that gets there).
+    """
+    best_r, best_t = 0.0, None
+    t = 0.0
+    while t <= 1.0 + 1e-9:
+        thresholded = [
+            (lbl if c >= t else None, c) for (lbl, c) in results_no_thresh
+        ]
+        m = compute_metrics(thresholded, cases)
+        if m["precision"] >= p_floor and m["recall"] > best_r:
+            best_r, best_t = m["recall"], round(t, 4)
+        t += step
+    return best_r, best_t
+
+
+def calibrate_threshold(results_no_thresh, cases, step=0.01, metric="f0.5"):
+    """Sweep threshold and return (best_threshold, best_metric_value, best_metrics).
+
+    ``metric`` selects the scalar to maximise: ``"f1"`` or ``"f0.5"``.
+    """
+    def score(m):
+        return m["f1"] if metric == "f1" else fbeta(m["precision"], m["recall"], 0.5)
+
+    best = (0.0, -1.0, None)
+    t = 0.0
+    while t <= 1.0 + 1e-9:
+        thresholded = [
+            (lbl if c >= t else None, c) for (lbl, c) in results_no_thresh
+        ]
+        m = compute_metrics(thresholded, cases)
+        s = score(m)
+        if s > best[1]:
+            best = (round(t, 4), s, m)
+        t += step
+    return best
+
+
 logging.disable(logging.CRITICAL)
 
 _CI_MODE = "--ci" in sys.argv
@@ -165,7 +214,7 @@ def run_padaos(bundle, cases):
 
     m = compute_metrics(results, cases)
     print_report("padaos  (regex, no fuzz)", m, latencies, bundle.intents, train_ms)
-    return m, statistics.median(latencies), statistics.mean(latencies), train_ms
+    return m, statistics.median(latencies), statistics.mean(latencies), train_ms, None
 
 
 def run_padatious(bundle, cases, threshold=0.5):
@@ -180,18 +229,18 @@ def run_padatious(bundle, cases, threshold=0.5):
         c.train(single_thread=True, debug=False)
         train_ms = (time.perf_counter() - t0) * 1000
 
-        results, latencies = [], []
+        raw, latencies = [], []
         for utt, _ in cases:
             t0 = time.perf_counter()
             r  = c.calc_intent(normalize_utterance(utt))
             latencies.append((time.perf_counter() - t0) * 1000)
-            predicted = r.name if (r and r.conf >= threshold) else None
-            results.append((predicted, r.conf if r else 0.0))
+            raw.append((r.name if r else None, r.conf if r else 0.0))
 
+    results = [(lbl if c >= threshold else None, c) for (lbl, c) in raw]
     m = compute_metrics(results, cases)
     print_report(f"padatious  (neural, threshold={threshold})", m, latencies,
                  bundle.intents, train_ms)
-    return m, statistics.median(latencies), statistics.mean(latencies), train_ms
+    return m, statistics.median(latencies), statistics.mean(latencies), train_ms, raw
 
 
 def run_nebulento(bundle, cases, strategy_name, threshold=0.5):
@@ -209,18 +258,18 @@ def run_nebulento(bundle, cases, strategy_name, threshold=0.5):
               f"  — registration failed: {exc}")
         return None
 
-    results, latencies = [], []
+    raw, latencies = [], []
     for utt, _ in cases:
         t0 = time.perf_counter()
         r  = c.calc_intent(utt)
         latencies.append((time.perf_counter() - t0) * 1000)
-        predicted = r.get("name") if (r and r.get("conf", 0) >= threshold) else None
-        results.append((predicted, r.get("conf", 0.0) if r else 0.0))
+        raw.append((r.get("name") if r else None, r.get("conf", 0.0) if r else 0.0))
 
+    results = [(lbl if c >= threshold else None, c) for (lbl, c) in raw]
     m = compute_metrics(results, cases)
     label = f"nebulento  {strategy_name.lower().replace('_', '-')}"
     print_report(label, m, latencies, bundle.intents)
-    return m, statistics.median(latencies), statistics.mean(latencies), None
+    return m, statistics.median(latencies), statistics.mean(latencies), None, raw
 
 
 def run_nebulento_hierarchical(bundle, cases, strategy_name, threshold=0.5,
@@ -251,18 +300,18 @@ def run_nebulento_hierarchical(bundle, cases, strategy_name, threshold=0.5,
               f"  — registration failed: {exc}")
         return None
 
-    results, latencies = [], []
+    raw, latencies = [], []
     for utt, _ in cases:
         t0 = time.perf_counter()
         r  = c.calc_intent(utt)
         latencies.append((time.perf_counter() - t0) * 1000)
-        predicted = r.get("name") if (r and r.get("conf", 0) >= threshold) else None
-        results.append((predicted, r.get("conf", 0.0) if r else 0.0))
+        raw.append((r.get("name") if r else None, r.get("conf", 0.0) if r else 0.0))
 
+    results = [(lbl if c >= threshold else None, c) for (lbl, c) in raw]
     m = compute_metrics(results, cases)
     label = f"nebulento-hierarchical  {strategy_name.lower().replace('_', '-')}"
     print_report(label, m, latencies, bundle.intents)
-    return m, statistics.median(latencies), statistics.mean(latencies), None
+    return m, statistics.median(latencies), statistics.mean(latencies), None, raw
 
 
 # ── summary table ──────────────────────────────────────────────────────────
@@ -306,11 +355,15 @@ def run_dataset(name):
     print("Splits  : " + ", ".join(f"{k}={len(v)}" for k, v in bundle.splits.items()))
 
     rows = []
-    m, lat, mean_lat, tr = run_padaos(bundle, cases)
-    rows.append(("padaos  (regex)", m, lat, mean_lat, tr))
+    cal_rows = []
 
-    m, lat, mean_lat, tr = run_padatious(bundle, cases, threshold=0.5)
+    m, lat, mean_lat, tr, raw = run_padaos(bundle, cases)
+    rows.append(("padaos  (regex)", m, lat, mean_lat, tr))
+    # padaos has no conf knob — skip calibration
+
+    m, lat, mean_lat, tr, raw = run_padatious(bundle, cases, threshold=0.5)
     rows.append(("padatious  neural  threshold=0.5", m, lat, mean_lat, tr))
+    cal_rows.append(_calibrate_row("padatious", raw, cases, 0.5, m))
 
     # every flat MatchStrategy
     for strategy in MatchStrategy:
@@ -318,9 +371,10 @@ def run_dataset(name):
                                strategy_name=strategy.name, threshold=0.5)
         if result is None:
             continue
-        m, lat, mean_lat, tr = result
-        rows.append((f"nebulento  {strategy.name.lower().replace('_', '-')}",
-                     m, lat, mean_lat, tr))
+        m, lat, mean_lat, tr, raw = result
+        label_short = strategy.name.lower().replace('_', '-')
+        rows.append((f"nebulento  {label_short}", m, lat, mean_lat, tr))
+        cal_rows.append(_calibrate_row(f"neb {label_short}"[:24], raw, cases, 0.5, m))
 
     # two-stage variant — intents grouped into the dataset's domains.
     # damerau-levenshtein with no gate isolates the cost of misrouting;
@@ -334,11 +388,52 @@ def run_dataset(name):
             domain_threshold=domain_threshold)
         if result is None:
             continue
-        m, lat, mean_lat, tr = result
-        rows.append((f"nebulento-hierarchical  {strategy.name.lower().replace('_', '-')}",
+        m, lat, mean_lat, tr, raw = result
+        label_short = strategy.name.lower().replace('_', '-')
+        rows.append((f"nebulento-hierarchical  {label_short}",
                      m, lat, mean_lat, tr))
+        cal_rows.append(_calibrate_row(
+            f"hier {label_short} g={domain_threshold}"[:24],
+            raw, cases, 0.5, m))
 
     summary(f"{name}  —  {bundle.repo}", rows)
+    _print_calibration_table(cal_rows)
+
+
+def _calibrate_row(label, raw, cases, default_thr, default_metrics):
+    """Compute the calibration row for one engine."""
+    df1 = default_metrics["f1"]
+    dfp = default_metrics["fp"]
+    df05 = fbeta(default_metrics["precision"], default_metrics["recall"], 0.5)
+    opt_thr, _, opt_metrics = calibrate_threshold(raw, cases, step=0.01,
+                                                  metric="f0.5")
+    of1 = opt_metrics["f1"]
+    ofp = opt_metrics["fp"]
+    of05 = fbeta(opt_metrics["precision"], opt_metrics["recall"], 0.5)
+    rec_at_p, rec_thr = recall_at_precision(raw, cases, p_floor=0.99, step=0.01)
+    return (label, default_thr, df1, df05, dfp,
+            opt_thr, of1, of05, ofp, rec_at_p, rec_thr)
+
+
+def _print_calibration_table(rows):
+    print(f"\n{'─'*108}")
+    print("  Per-engine threshold calibration  (sweep 0..1 step 0.01, max F_0.5)")
+    print(f"  {'Engine':<24} {'def_thr':>7} {'def_F1':>7} {'defF.5':>7} {'def_FP':>6}"
+          f"  {'opt_thr':>7} {'opt_F1':>7} {'optF.5':>7} {'opt_FP':>6}"
+          f"  {'R@P99':>6} {'thr':>5}")
+    print(f"{'─'*108}")
+    for r in rows:
+        (label, dthr, df1, df05, dfp,
+         othr, of1, of05, ofp, rec_at_p, rec_thr) = r
+        rec_t = f"{rec_thr:.2f}" if rec_thr is not None else "--"
+        print(f"  {label:<24} {dthr:>7.2f} {df1:>7.3f} {df05:>7.3f} {dfp:>6d}"
+              f"  {othr:>7.2f} {of1:>7.3f} {of05:>7.3f} {ofp:>6d}"
+              f"  {rec_at_p:>6.1%} {rec_t:>5}")
+    print(f"{'─'*108}")
+    print("  F_0.5 (β=0.5) weights precision 2x recall — the right summary metric")
+    print("  for OVOS, where a wrong intent is unrecoverable but a missed intent")
+    print("  falls through to fallback handlers. R@P99 = max recall achievable")
+    print("  with the threshold tuned to keep precision >= 99%.")
 
 
 if __name__ == "__main__":
