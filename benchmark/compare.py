@@ -199,10 +199,15 @@ def run_nebulento(bundle, cases, strategy_name, threshold=0.5):
     from nebulento.fuzz import MatchStrategy
     strategy = getattr(MatchStrategy, strategy_name)
     c = IntentContainer(fuzzy_strategy=strategy)
-    for entity_name, samples in bundle.entities.items():
-        c.add_entity(entity_name, samples)
-    for name, data in bundle.intents.items():
-        c.add_intent(name, data["train"])
+    try:
+        for entity_name, samples in bundle.entities.items():
+            c.add_entity(entity_name, samples)
+        for name, data in bundle.intents.items():
+            c.add_intent(name, data["train"])
+    except Exception as exc:
+        print(f"[SKIP] nebulento  {strategy_name.lower().replace('_', '-')}"
+              f"  — registration failed: {exc}")
+        return None
 
     results, latencies = [], []
     for utt, _ in cases:
@@ -223,21 +228,28 @@ def run_nebulento_hierarchical(bundle, cases, strategy_name, threshold=0.5,
     from nebulento import HierarchicalIntentContainer
     from nebulento.fuzz import MatchStrategy
     strategy = getattr(MatchStrategy, strategy_name)
-    intent_domain = {intent: dom
-                     for dom, intents in bundle.domains.items()
-                     for intent in intents}
     c = HierarchicalIntentContainer(fuzzy_strategy=strategy,
                                     domain_threshold=domain_threshold)
-    for name, data in bundle.intents.items():
-        c.register_domain_intent(intent_domain[name], name, data["train"])
-    # register each entity in every domain whose intents reference it
-    domain_entities = defaultdict(set)
-    for name, data in bundle.intents.items():
-        for entity_name in data["entities"]:
-            domain_entities[intent_domain[name]].add(entity_name)
-    for dom, entity_names in domain_entities.items():
-        for entity_name in entity_names:
-            c.register_domain_entity(dom, entity_name, bundle.entities[entity_name])
+    # use the dataset-authoritative ``domain`` field on each intent; parsing
+    # ``intent_id`` with a hard-coded separator is fragile (datasets vary
+    # between ``:`` and ``.``).
+    try:
+        for name, data in bundle.intents.items():
+            c.register_domain_intent(data["domain"], name, data["train"])
+        # register each entity in every domain whose intents reference it
+        domain_entities = defaultdict(set)
+        for name, data in bundle.intents.items():
+            for entity_name in data["entities"]:
+                domain_entities[data["domain"]].add(entity_name)
+        for dom, entity_names in domain_entities.items():
+            for entity_name in entity_names:
+                c.register_domain_entity(dom, entity_name,
+                                         bundle.entities[entity_name])
+    except Exception as exc:
+        print(f"[SKIP] nebulento-hierarchical  "
+              f"{strategy_name.lower().replace('_', '-')}"
+              f"  — registration failed: {exc}")
+        return None
 
     results, latencies = [], []
     for utt, _ in cases:
@@ -302,8 +314,11 @@ def run_dataset(name):
 
     # every flat MatchStrategy
     for strategy in MatchStrategy:
-        m, lat, mean_lat, tr = run_nebulento(bundle, cases,
-                                             strategy_name=strategy.name, threshold=0.5)
+        result = run_nebulento(bundle, cases,
+                               strategy_name=strategy.name, threshold=0.5)
+        if result is None:
+            continue
+        m, lat, mean_lat, tr = result
         rows.append((f"nebulento  {strategy.name.lower().replace('_', '-')}",
                      m, lat, mean_lat, tr))
 
@@ -314,9 +329,12 @@ def run_dataset(name):
         (MatchStrategy.DAMERAU_LEVENSHTEIN_SIMILARITY, 0.0),
         (MatchStrategy.TOKEN_SET_RATIO, 0.7),
     ):
-        m, lat, mean_lat, tr = run_nebulento_hierarchical(
+        result = run_nebulento_hierarchical(
             bundle, cases, strategy_name=strategy.name, threshold=0.5,
             domain_threshold=domain_threshold)
+        if result is None:
+            continue
+        m, lat, mean_lat, tr = result
         rows.append((f"nebulento-hierarchical  {strategy.name.lower().replace('_', '-')}",
                      m, lat, mean_lat, tr))
 
