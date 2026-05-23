@@ -4,8 +4,10 @@ import re
 import logging
 from typing import Dict, Iterator, List, Optional
 
+from ovos_spec_tools import expand as expand_template
+
 from nebulento.fuzz import MatchStrategy, match_one
-from nebulento.bracket_expansion import expand_template, normalize_example, normalize_utterance
+from nebulento.bracket_expansion import normalize_example, normalize_utterance
 import quebra_frases
 
 LOG = logging.getLogger("nebulento")

@@ -4,15 +4,14 @@ from functools import lru_cache
 from os.path import isfile
 from typing import Optional, Dict, List, Union
 
-from langcodes import closest_match
 from ovos_bus_client.client import MessageBusClient
 from ovos_bus_client.message import Message
 from ovos_bus_client.session import SessionManager, Session
 from ovos_config.config import Configuration
 from ovos_plugin_manager.templates.pipeline import ConfidenceMatcherPipeline, IntentHandlerMatch
+from ovos_spec_tools import closest_lang, standardize_lang
 from ovos_utils import flatten_list
 from ovos_utils.fakebus import FakeBus
-from ovos_utils.lang import standardize_lang_tag
 from ovos_utils.log import LOG
 
 from nebulento import HierarchicalIntentContainer, IntentContainer, MatchStrategy
@@ -58,11 +57,11 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
         super().__init__(config=config, bus=bus)
 
         core_config = Configuration()
-        self.lang = standardize_lang_tag(core_config.get("lang", "en-US"))
+        self.lang = standardize_lang(core_config.get("lang", "en-US"))
         langs = core_config.get("secondary_langs") or []
         if self.lang not in langs:
             langs.append(self.lang)
-        langs = [standardize_lang_tag(l) for l in langs]
+        langs = [standardize_lang(l) for l in langs]
 
         self.conf_high = self.config.get("conf_high") or 0.95
         self.conf_med = self.config.get("conf_med") or 0.8
@@ -131,7 +130,7 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
                      message: Optional[Message] = None) -> Optional[IntentHandlerMatch]:
         LOG.debug(f"Nebulento matching confidence > {limit}")
         utterances = flatten_list(utterances)
-        lang = standardize_lang_tag(lang or self.lang)
+        lang = standardize_lang(lang or self.lang)
         intent = self.calc_intent(utterances, lang, message)
         if intent is not None and intent.conf > limit:
             skill_id = intent.name.split(":")[0]
@@ -168,7 +167,7 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
         register_func(name, samples)
 
     def register_intent(self, message):
-        lang = standardize_lang_tag(message.data.get("lang", self.lang))
+        lang = standardize_lang(message.data.get("lang", self.lang))
         if lang not in self.containers:
             return
         name = message.data["name"]
@@ -183,7 +182,7 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
             pass
 
     def register_entity(self, message):
-        lang = standardize_lang_tag(message.data.get("lang", self.lang))
+        lang = standardize_lang(message.data.get("lang", self.lang))
         if lang not in self.containers:
             return
         self.registered_entities.append(message.data)
@@ -247,9 +246,7 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
     def _get_closest_lang(self, lang: str) -> Optional[str]:
         if not self.containers:
             return None
-        lang = standardize_lang_tag(lang)
-        closest, score = closest_match(lang, list(self.containers.keys()))
-        return closest if score < 10 else None
+        return closest_lang(lang, list(self.containers.keys()))
 
     def shutdown(self):
         self.bus.remove("padatious:register_intent", self.register_intent)
