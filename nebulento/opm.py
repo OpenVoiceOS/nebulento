@@ -82,6 +82,7 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
         self.bus.on("padatious:register_intent", self.register_intent)
         self.bus.on("padatious:register_entity", self.register_entity)
         self.bus.on("detach_intent", self.handle_detach_intent)
+        self.bus.on("detach_entity", self.handle_detach_entity)
         self.bus.on("detach_skill", self.handle_detach_skill)
         self.bus.on("mycroft.skills.train", self.train)
 
@@ -210,6 +211,17 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
     def handle_detach_intent(self, message):
         self._detach_intent(message.data.get("intent_name"))
 
+    def handle_detach_entity(self, message):
+        """Handle ``detach_entity`` bus message."""
+        name = message.data.get("entity_name") or message.data.get("name")
+        if not name:
+            return
+        lang = standardize_lang(message.data.get("lang", self.lang))
+        self._detach_entity(name, lang)
+        self.registered_entities = [
+            en for en in self.registered_entities if en.get("name") != name
+        ]
+
     def handle_detach_skill(self, message):
         skill_id = message.data["skill_id"]
         for intent_name in [i for i in self.registered_intents if i.startswith(skill_id)]:
@@ -252,6 +264,7 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
         self.bus.remove("padatious:register_intent", self.register_intent)
         self.bus.remove("padatious:register_entity", self.register_entity)
         self.bus.remove("detach_intent", self.handle_detach_intent)
+        self.bus.remove("detach_entity", self.handle_detach_entity)
         self.bus.remove("detach_skill", self.handle_detach_skill)
         self.bus.remove("mycroft.skills.train", self.train)
 

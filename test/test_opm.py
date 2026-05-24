@@ -174,6 +174,24 @@ class TestNebulentoPipelineWithEntities(unittest.TestCase):
         self.pipeline._detach_entity("skill:item", "en-US")
         self.assertNotIn("skill:item", self.pipeline.containers["en-US"].registered_entities)
 
+    def test_handle_detach_entity_via_bus(self):
+        """detach_entity bus event removes the entity from the container."""
+        self.pipeline.handle_detach_entity(Message("detach_entity", {
+            "entity_name": "skill:item", "lang": "en-US",
+        }))
+        self.assertNotIn(
+            "skill:item",
+            self.pipeline.containers["en-US"].registered_entities,
+        )
+
+    def test_handle_detach_entity_missing_name_is_noop(self):
+        """detach_entity without a name must not raise or clear the container."""
+        self.pipeline.handle_detach_entity(Message("detach_entity", {}))
+        self.assertIn(
+            "skill:item",
+            self.pipeline.containers["en-US"].registered_entities,
+        )
+
 
 class TestHierarchicalNebulentoPipeline(unittest.TestCase):
     def setUp(self):
