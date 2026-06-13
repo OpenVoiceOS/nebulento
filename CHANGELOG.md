@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.6.0a2](https://github.com/OpenVoiceOS/nebulento/tree/0.6.0a2) (2026-06-13)
+
+[Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.6.0a1...0.6.0a2)
+
+**Merged pull requests:**
+
+- docs: standardize NGI0 Commons Fund attribution [\#30](https://github.com/OpenVoiceOS/nebulento/pull/30) ([JarbasAl](https://github.com/JarbasAl))
+
+## [0.6.0a1](https://github.com/OpenVoiceOS/nebulento/tree/0.6.0a1) (2026-05-23)
+
+[Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.5.0a1...0.6.0a1)
+
+**Merged pull requests:**
+
+- feat: migrate to ovos-spec-tools [\#27](https://github.com/OpenVoiceOS/nebulento/pull/27) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.5.0a1](https://github.com/OpenVoiceOS/nebulento/tree/0.5.0a1) (2026-05-22)
 
 [Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.4.0a1...0.5.0a1)
