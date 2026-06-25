@@ -19,12 +19,12 @@ Evaluated on the English subset of `OpenVoiceOS/intents-for-eval` — 1750 test 
 | `RATIO` | **72.9%** | 96.9% | **74.5%** | **0.842** | 40 / 50 |
 | `SIMPLE_RATIO` | 72.9% | 96.9% | 74.4% | 0.842 | 40 / 50 |
 | `TOKEN_SORT_RATIO` | 71.1% | 96.9% | 72.6% | 0.830 | 40 / 50 |
-| `TOKEN_SET_RATIO` | 71.1% | 96.6% | 72.8% | 0.830 | 43 / 50 |
+| `TOKEN_SET_RATIO` | 71.0% | 96.6% | 72.6% | 0.829 | 43 / 50 |
 | `DAMERAU_LEVENSHTEIN_SIMILARITY` | 69.2% | **98.6%** | 69.3% | 0.814 | **17 / 50** |
 | `PARTIAL_RATIO` | 64.0% | 95.8% | 65.8% | 0.780 | 49 / 50 |
 | `PARTIAL_TOKEN_SORT_RATIO` | 61.4% | 95.6% | 63.2% | 0.761 | 49 / 50 |
-| `PARTIAL_TOKEN_RATIO` | 49.0% | 94.5% | 50.4% | 0.657 | 50 / 50 |
-| `PARTIAL_TOKEN_SET_RATIO` | 49.0% | 94.5% | 50.4% | 0.657 | 50 / 50 |
+| `PARTIAL_TOKEN_RATIO` | 44.1% | 93.9% | 45.4% | 0.612 | 50 / 50 |
+| `PARTIAL_TOKEN_SET_RATIO` | 44.1% | 93.9% | 45.4% | 0.612 | 50 / 50 |
 
 Latency: a few ms per utterance for most strategies; `SIMPLE_RATIO` (difflib) is far slower than `RATIO` for the same accuracy — prefer `RATIO`.
 
@@ -96,7 +96,7 @@ Latency: a few ms per utterance for most strategies; `SIMPLE_RATIO` (difflib) is
 
 **False positive risk:** High. 43 / 50 false positives on the benchmark dataset. Not suitable as a sole gating mechanism without a confidence threshold.
 
-**Benchmark:** Accuracy 71.1%, Precision 96.6%, Recall 72.8%, F1 0.830, 43 / 50 false positives.
+**Benchmark:** Accuracy 71.0%, Precision 96.6%, Recall 72.6%, F1 0.829, 43 / 50 false positives.
 
 ---
 

@@ -57,20 +57,25 @@ class HierarchicalIntentContainer:
         self.domains: Dict[str, IntentContainer] = {}
         #: Raw training samples accumulated per domain (for inspection / re-training).
         self.training_data: Dict[str, List[str]] = defaultdict(list)
+        #: Domains whose classifier entry is stale and must be rebuilt before a query.
+        self._dirty_domains: set = set()
 
     # ── internal ───────────────────────────────────────────────────────────
 
-    def _retrain_domain_classifier(self, domain_name: str) -> None:
-        """Rebuild the top-level classifier entry for *domain_name*.
+    def _sync_domain_classifier(self) -> None:
+        """Rebuild stale classifier entries.
 
-        Called after the domain's training samples change so the classifier
-        always reflects the current per-domain corpus.
+        Registration only marks a domain dirty; the top-level classifier is
+        rebuilt here, lazily, the first time a query needs it. This keeps bulk
+        registration linear instead of re-expanding the whole corpus per call.
         """
-        if domain_name in self.domain_engine.intent_names:
-            self.domain_engine.remove_intent(domain_name)
-        samples = self.training_data.get(domain_name)
-        if samples:
-            self.domain_engine.add_intent(domain_name, samples)
+        for domain_name in self._dirty_domains:
+            if domain_name in self.domain_engine.intent_names:
+                self.domain_engine.remove_intent(domain_name)
+            samples = self.training_data.get(domain_name)
+            if samples:
+                self.domain_engine.add_intent(domain_name, samples)
+        self._dirty_domains.clear()
 
     # ── domain management ──────────────────────────────────────────────────
 
@@ -82,6 +87,7 @@ class HierarchicalIntentContainer:
         """
         self.training_data.pop(domain_name, None)
         self.domains.pop(domain_name, None)
+        self._dirty_domains.discard(domain_name)
         if domain_name in self.domain_engine.intent_names:
             self.domain_engine.remove_intent(domain_name)
 
@@ -92,7 +98,8 @@ class HierarchicalIntentContainer:
         """Register an intent inside a domain.
 
         Creates the domain's :class:`~nebulento.container.IntentContainer`
-        on first use and (re)trains the top-level domain classifier.
+        on first use. The top-level domain classifier is marked stale and
+        rebuilt lazily on the next query.
 
         Args:
             domain_name: Target domain (created if it does not exist).
@@ -105,7 +112,7 @@ class HierarchicalIntentContainer:
             )
         self.domains[domain_name].add_intent(intent_name, intent_samples)
         self.training_data[domain_name] += intent_samples
-        self._retrain_domain_classifier(domain_name)
+        self._dirty_domains.add(domain_name)
 
     def remove_domain_intent(self, domain_name: str, intent_name: str) -> None:
         """Remove a specific intent from a domain.
@@ -158,6 +165,7 @@ class HierarchicalIntentContainer:
             :class:`~nebulento.container.MatchResult` dict whose ``name`` key
             is the predicted domain name (or ``None`` if no domain matched).
         """
+        self._sync_domain_classifier()
         return self.domain_engine.calc_intent(query)
 
     def calc_intent(self, query: str,
@@ -192,6 +200,7 @@ class HierarchicalIntentContainer:
 
         resolved_domain: Optional[str] = domain
         if resolved_domain is None:
+            self._sync_domain_classifier()
             dom_result = self.domain_engine.calc_intent(query)
             if float(dom_result.get("conf", 0.0)) < self.domain_threshold:  # type: ignore[arg-type]
                 return no_match
