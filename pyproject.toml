@@ -30,7 +30,7 @@ ovos = [
 ]
 benchmark = [
     "padaos",
-    "fann2==1.0.7",
+    "fann2==1.1.2",
     "padatious",
     "datasets",
 ]
