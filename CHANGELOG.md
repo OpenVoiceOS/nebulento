@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.0a1](https://github.com/OpenVoiceOS/nebulento/tree/0.7.0a1) (2026-06-25)
+
+[Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.6.0a2...0.7.0a1)
+
+**Merged pull requests:**
+
+- feat: massive-templates benchmark, ovos-spec-tools migration, benchmark cleanup [\#28](https://github.com/OpenVoiceOS/nebulento/pull/28) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.6.0a2](https://github.com/OpenVoiceOS/nebulento/tree/0.6.0a2) (2026-06-13)
 
 [Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.6.0a1...0.6.0a2)
