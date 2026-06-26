@@ -249,5 +249,161 @@ class TestHierarchicalNebulentoPipeline(unittest.TestCase):
         self.assertIsNone(result)
 
 
+def _spec_register_template_msg(skill_id, intent_name, samples, lang="en-US",
+                                blacklist=None):
+    return Message("ovos.intent.register.template", {
+        "skill_id": skill_id,
+        "intent_name": intent_name,
+        "lang": lang,
+        "samples": samples,
+        "blacklist": blacklist or [],
+    })
+
+
+def _spec_register_entity_msg(skill_id, entity_name, samples, lang="en-US"):
+    return Message("ovos.entity.register", {
+        "skill_id": skill_id,
+        "entity_name": entity_name,
+        "lang": lang,
+        "samples": samples,
+    })
+
+
+class TestNebulentoPipelineIntent4(unittest.TestCase):
+    """OVOS-INTENT-4 template registration surface (alongside legacy)."""
+
+    def setUp(self):
+        self.bus = mock.Mock()
+        self.pipeline = NebulentoPipeline(bus=self.bus, config={
+            "conf_high": 0.95, "conf_med": 0.8, "conf_low": 0.5,
+        })
+
+    def test_register_template_intent_then_fuzzy_match(self):
+        self.pipeline.handle_register_template(_spec_register_template_msg(
+            "test_skill", "HelloIntent",
+            ["hello", "hi", "how are you", "hey there"],
+        ))
+        # intent stored under the combined skill_id:intent_name label
+        self.assertIn("test_skill:HelloIntent",
+                      self.pipeline.registered_intents)
+        msg = Message("recognizer_loop:utterance",
+                      {"utterances": ["hello"], "lang": "en-US"})
+        result = self.pipeline.match_high(["hello"], "en-US", msg)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.match_type, "test_skill:HelloIntent")
+        self.assertEqual(result.skill_id, "test_skill")
+
+    def test_register_template_fuzzy_inexact(self):
+        """A fuzzy (non-exact) utterance still matches via medium confidence."""
+        self.pipeline.handle_register_template(_spec_register_template_msg(
+            "test_skill", "GreetIntent",
+            ["good morning", "good evening", "good afternoon"],
+        ))
+        msg = Message("recognizer_loop:utterance",
+                      {"utterances": ["goodd morning"], "lang": "en-US"})
+        result = self.pipeline.match_medium(["goodd morning"], "en-US", msg)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.match_type, "test_skill:GreetIntent")
+
+    def test_register_template_with_entity(self):
+        self.pipeline = NebulentoPipeline(bus=mock.Mock(), config={
+            "conf_high": 0.9, "conf_med": 0.5, "conf_low": 0.3,
+            "strategy": "TOKEN_SET_RATIO",
+        })
+        self.pipeline.handle_register_template(_spec_register_template_msg(
+            "shop_skill", "BuyIntent",
+            ["buy {item}", "purchase {item}", "get {item} for me"],
+        ))
+        self.pipeline.handle_register_entity_spec(_spec_register_entity_msg(
+            "shop_skill", "item", ["milk", "cheese", "bread"],
+        ))
+        msg = Message("recognizer_loop:utterance",
+                      {"utterances": ["buy milk"], "lang": "en-US"})
+        result = self.pipeline.match_medium(["buy milk"], "en-US", msg)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.match_type, "shop_skill:BuyIntent")
+
+    def test_legacy_and_spec_handlers_coexist(self):
+        """Legacy padatious registration still works after INTENT-4 wiring."""
+        self.pipeline.register_intent(_register_intent_msg(
+            "legacy_skill:ByeIntent", ["goodbye", "bye", "see you"],
+        ))
+        self.pipeline.handle_register_template(_spec_register_template_msg(
+            "spec_skill", "HiIntent", ["hello", "hi there"],
+        ))
+        self.assertIn("legacy_skill:ByeIntent",
+                      self.pipeline.registered_intents)
+        self.assertIn("spec_skill:HiIntent",
+                      self.pipeline.registered_intents)
+
+    def test_deregister_intent_spec_removes_match(self):
+        self.pipeline.handle_register_template(_spec_register_template_msg(
+            "test_skill", "HelloIntent", ["hello", "hi", "hey there"],
+        ))
+        self.pipeline.handle_deregister_intent_spec(Message(
+            "ovos.intent.deregister",
+            {"skill_id": "test_skill", "intent_name": "HelloIntent",
+             "lang": "en-US"},
+        ))
+        msg = Message("recognizer_loop:utterance",
+                      {"utterances": ["hello"], "lang": "en-US"})
+        result = self.pipeline.match_high(["hello"], "en-US", msg)
+        self.assertIsNone(result)
+
+    def test_deregister_skill_spec_removes_all(self):
+        self.pipeline.handle_register_template(_spec_register_template_msg(
+            "test_skill", "HelloIntent", ["hello", "hi", "hey there"],
+        ))
+        self.pipeline.handle_deregister_skill_spec(Message(
+            "ovos.skill.deregister", {"skill_id": "test_skill"},
+        ))
+        msg = Message("recognizer_loop:utterance",
+                      {"utterances": ["hello"], "lang": "en-US"})
+        result = self.pipeline.match_high(["hello"], "en-US", msg)
+        self.assertIsNone(result)
+
+    def test_disable_then_enable_intent(self):
+        self.pipeline.handle_register_template(_spec_register_template_msg(
+            "test_skill", "HelloIntent", ["hello", "hi", "hey there"],
+        ))
+        disable = Message("ovos.intent.disable",
+                          {"skill_id": "test_skill",
+                           "intent_name": "HelloIntent", "lang": "en-US"})
+        self.pipeline.handle_disable_intent_spec(disable)
+        msg = Message("recognizer_loop:utterance",
+                      {"utterances": ["hello"], "lang": "en-US"})
+        self.assertIsNone(self.pipeline.match_high(["hello"], "en-US", msg))
+        # re-enable restores match candidacy
+        self.pipeline.handle_enable_intent_spec(Message(
+            "ovos.intent.enable",
+            {"skill_id": "test_skill", "intent_name": "HelloIntent",
+             "lang": "en-US"}))
+        result = self.pipeline.match_high(["hello"], "en-US", msg)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.match_type, "test_skill:HelloIntent")
+
+    def test_malformed_template_missing_skill_id_ignored(self):
+        self.pipeline.handle_register_template(Message(
+            "ovos.intent.register.template",
+            {"intent_name": "Orphan", "lang": "en-US", "samples": ["hi"]}))
+        self.assertEqual(self.pipeline.registered_intents, [])
+
+    def test_empty_samples_template_ignored(self):
+        self.pipeline.handle_register_template(_spec_register_template_msg(
+            "test_skill", "EmptyIntent", [],
+        ))
+        self.assertNotIn("test_skill:EmptyIntent",
+                         self.pipeline.registered_intents)
+
+    def test_shutdown_removes_spec_handlers(self):
+        bus = mock.Mock()
+        pipeline = NebulentoPipeline(bus=bus, config={})
+        pipeline.shutdown()
+        removed = {call.args[0] for call in bus.remove.call_args_list}
+        self.assertIn("ovos.intent.register.template", removed)
+        self.assertIn("ovos.entity.register", removed)
+        self.assertIn("ovos.intent.disable", removed)
+
+
 if __name__ == "__main__":
     unittest.main()
