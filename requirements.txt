@@ -1,4 +1,4 @@
 rapidfuzz
 quebra_frases
-ovos-spec-tools
+ovos-spec-tools>=0.10.0a1
 ovos-utils

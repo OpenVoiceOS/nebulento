@@ -9,7 +9,7 @@ from ovos_bus_client.message import Message
 from ovos_bus_client.session import SessionManager, Session
 from ovos_config.config import Configuration
 from ovos_plugin_manager.templates.pipeline import ConfidenceMatcherPipeline, IntentHandlerMatch
-from ovos_spec_tools import closest_lang, standardize_lang
+from ovos_spec_tools import SpecMessage, closest_lang, standardize_lang
 from ovos_utils import flatten_list
 from ovos_utils.fakebus import FakeBus
 from ovos_utils.log import LOG
@@ -79,6 +79,7 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
 
         self.containers = {lang: self._build_container() for lang in langs}
 
+        # legacy (padatious-compatible) registration surface
         self.bus.on("padatious:register_intent", self.register_intent)
         self.bus.on("padatious:register_entity", self.register_entity)
         self.bus.on("detach_intent", self.handle_detach_intent)
@@ -86,8 +87,29 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
         self.bus.on("detach_skill", self.handle_detach_skill)
         self.bus.on("mycroft.skills.train", self.train)
 
+        # OVOS-INTENT-4 registration surface (alongside the legacy one).
+        # Nebulento is a sample/template matcher, so it consumes the
+        # template registration topic (§6) but NOT the keyword topic (§5/§11).
+        self.bus.on(SpecMessage.INTENT_REGISTER_TEMPLATE.value,
+                    self.handle_register_template)
+        self.bus.on(SpecMessage.ENTITY_REGISTER.value,
+                    self.handle_register_entity_spec)
+        self.bus.on(SpecMessage.INTENT_DEREGISTER.value,
+                    self.handle_deregister_intent_spec)
+        self.bus.on(SpecMessage.ENTITY_DEREGISTER.value,
+                    self.handle_deregister_entity_spec)
+        self.bus.on(SpecMessage.SKILL_DEREGISTER.value,
+                    self.handle_deregister_skill_spec)
+        self.bus.on(SpecMessage.INTENT_ENABLE.value,
+                    self.handle_enable_intent_spec)
+        self.bus.on(SpecMessage.INTENT_DISABLE.value,
+                    self.handle_disable_intent_spec)
+
         self.registered_intents: List[str] = []
         self.registered_entities: List[dict] = []
+        # INTENT-4 §8.5 — intents disabled without losing their definition;
+        # excluded from match candidacy until re-enabled.
+        self.disabled_intents: set = set()
         LOG.debug("Loaded Nebulento pipeline")
 
     def train(self, message=None):
@@ -196,6 +218,107 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
             # skill reload — entity already registered, skip silently
             pass
 
+    # ── OVOS-INTENT-4 registration surface ──────────────────────────────────
+
+    @staticmethod
+    def _spec_label(message, key: str) -> Optional[str]:
+        """Build the internal ``skill_id:<key>`` label from an INTENT-4 payload.
+
+        INTENT-4 carries ``skill_id`` and ``intent_name`` / ``entity_name`` as
+        separate fields (§3.2); nebulento keys everything on the combined
+        ``skill_id:name`` label, matching the legacy padatious convention.
+        """
+        skill_id = message.data.get("skill_id")
+        name = message.data.get(key)
+        if not skill_id or not name:
+            LOG.warning(f"Ignoring malformed INTENT-4 payload on {message.msg_type!r}: "
+                        f"missing skill_id/{key}")
+            return None
+        return f"{skill_id}:{name}"
+
+    def handle_register_template(self, message):
+        """Consume ``ovos.intent.register.template`` (INTENT-4 §6).
+
+        Template intents are nebulento's native definition method. The payload
+        carries inline ``samples`` (OVOS-INTENT-1 templates); ``blacklist`` is a
+        suppression hint nebulento does not yet honour and is ignored.
+        """
+        lang = standardize_lang(message.data.get("lang", self.lang))
+        if lang not in self.containers:
+            return
+        name = self._spec_label(message, "intent_name")
+        if name is None:
+            return
+        samples = message.data.get("samples")
+        if not samples:
+            LOG.warning(f"Ignoring INTENT-4 template registration for {name!r}: "
+                        f"empty samples")
+            return
+        self.registered_intents.append(name)
+        container = self.containers[lang]
+        try:
+            self._add_intent(container, name, samples)
+        except RuntimeError:
+            # already registered (skill reload) — skip silently
+            pass
+
+    def handle_register_entity_spec(self, message):
+        """Consume ``ovos.entity.register`` (INTENT-4 §7)."""
+        lang = standardize_lang(message.data.get("lang", self.lang))
+        if lang not in self.containers:
+            return
+        name = self._spec_label(message, "entity_name")
+        if name is None:
+            return
+        samples = message.data.get("samples")
+        if not samples:
+            LOG.warning(f"Ignoring INTENT-4 entity registration for {name!r}: "
+                        f"empty samples")
+            return
+        self.registered_entities.append({"name": name, "lang": lang,
+                                         "samples": samples})
+        container = self.containers[lang]
+        try:
+            self._add_entity(container, name, samples)
+        except RuntimeError:
+            pass
+
+    def handle_deregister_intent_spec(self, message):
+        """Consume ``ovos.intent.deregister`` (INTENT-4 §8.2)."""
+        name = self._spec_label(message, "intent_name")
+        if name is None:
+            return
+        self._detach_intent(name)
+        self.disabled_intents.discard(name)
+
+    def handle_deregister_entity_spec(self, message):
+        """Consume ``ovos.entity.deregister`` (INTENT-4 §8.3)."""
+        name = self._spec_label(message, "entity_name")
+        if name is None:
+            return
+        lang = standardize_lang(message.data.get("lang", self.lang))
+        self._detach_entity(name, lang)
+        self.registered_entities = [
+            en for en in self.registered_entities if en.get("name") != name
+        ]
+
+    def handle_deregister_skill_spec(self, message):
+        """Consume ``ovos.skill.deregister`` (INTENT-4 §8.4)."""
+        # payload shape matches detach_skill — reuse the legacy handler
+        self.handle_detach_skill(message)
+
+    def handle_enable_intent_spec(self, message):
+        """Consume ``ovos.intent.enable`` (INTENT-4 §8.5)."""
+        name = self._spec_label(message, "intent_name")
+        if name is not None:
+            self.disabled_intents.discard(name)
+
+    def handle_disable_intent_spec(self, message):
+        """Consume ``ovos.intent.disable`` (INTENT-4 §8.5)."""
+        name = self._spec_label(message, "intent_name")
+        if name is not None:
+            self.disabled_intents.add(name)
+
     # ── detach ─────────────────────────────────────────────────────────────
 
     def _detach_intent(self, intent_name: str):
@@ -251,8 +374,21 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
         sess = SessionManager.get(message)
         container = self.containers[lang]
 
-        results = [_calc_nebulento_intent(utt, container, sess) for utt in utterances]
-        results = [r for r in results if r is not None]
+        # Invalidate the burst cache once per match call: registrations and
+        # deregistrations mutate the container between calls, and a stale cache
+        # entry would keep a removed intent matching. The intra-call ASR burst
+        # below still benefits after this clear.
+        _calc_nebulento_intent.cache_clear()
+        # Pass the blacklists as hashable frozensets rather than the Session
+        # object — ovos-bus-client>=2.4.0a1 makes Session unhashable, which
+        # would raise "unhashable type: 'Session'" at the lru_cache key.
+        bl_intents = frozenset(sess.blacklisted_intents or [])
+        bl_skills = frozenset(sess.blacklisted_skills or [])
+        results = [_calc_nebulento_intent(utt, container, bl_intents, bl_skills)
+                   for utt in utterances]
+        # INTENT-4 §8.5 — disabled intents are excluded from match candidacy
+        results = [r for r in results
+                   if r is not None and r.name not in self.disabled_intents]
         return max(results, key=lambda r: r.conf) if results else None
 
     def _get_closest_lang(self, lang: str) -> Optional[str]:
@@ -267,6 +403,20 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
         self.bus.remove("detach_entity", self.handle_detach_entity)
         self.bus.remove("detach_skill", self.handle_detach_skill)
         self.bus.remove("mycroft.skills.train", self.train)
+        self.bus.remove(SpecMessage.INTENT_REGISTER_TEMPLATE.value,
+                        self.handle_register_template)
+        self.bus.remove(SpecMessage.ENTITY_REGISTER.value,
+                        self.handle_register_entity_spec)
+        self.bus.remove(SpecMessage.INTENT_DEREGISTER.value,
+                        self.handle_deregister_intent_spec)
+        self.bus.remove(SpecMessage.ENTITY_DEREGISTER.value,
+                        self.handle_deregister_entity_spec)
+        self.bus.remove(SpecMessage.SKILL_DEREGISTER.value,
+                        self.handle_deregister_skill_spec)
+        self.bus.remove(SpecMessage.INTENT_ENABLE.value,
+                        self.handle_enable_intent_spec)
+        self.bus.remove(SpecMessage.INTENT_DISABLE.value,
+                        self.handle_disable_intent_spec)
 
 
 class HierarchicalNebulentoPipeline(NebulentoPipeline):
@@ -330,15 +480,20 @@ class HierarchicalNebulentoPipeline(NebulentoPipeline):
 @lru_cache(maxsize=128)  # covers burst of multiple ASR hypotheses without thrashing
 def _calc_nebulento_intent(utt: str,
                            container: IntentContainer,
-                           sess: Session) -> Optional[NebulentoIntent]:
-    """Match one utterance against the container, respecting session blacklists."""
+                           blacklisted_intents: frozenset = frozenset(),
+                           blacklisted_skills: frozenset = frozenset()) -> Optional[NebulentoIntent]:
+    """Match one utterance against the container, respecting session blacklists.
+
+    The session blacklists are passed as hashable frozensets so this stays
+    ``lru_cache``-able (Session is unhashable under ovos-bus-client>=2.4.0a1).
+    """
     try:
         result = container.calc_intent(utt)
         if result is None or not result.get("name"):
             return None
-        if result["name"] in sess.blacklisted_intents:
+        if result["name"] in blacklisted_intents:
             return None
-        if result["name"].split(":")[0] in sess.blacklisted_skills:
+        if result["name"].split(":")[0] in blacklisted_skills:
             return None
         return NebulentoIntent(
             name=result["name"],
