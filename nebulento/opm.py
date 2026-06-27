@@ -374,7 +374,18 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
         sess = SessionManager.get(message)
         container = self.containers[lang]
 
-        results = [_calc_nebulento_intent(utt, container, sess) for utt in utterances]
+        # Invalidate the burst cache once per match call: registrations and
+        # deregistrations mutate the container between calls, and a stale cache
+        # entry would keep a removed intent matching. The intra-call ASR burst
+        # below still benefits after this clear.
+        _calc_nebulento_intent.cache_clear()
+        # Pass the blacklists as hashable frozensets rather than the Session
+        # object — ovos-bus-client>=2.4.0a1 makes Session unhashable, which
+        # would raise "unhashable type: 'Session'" at the lru_cache key.
+        bl_intents = frozenset(sess.blacklisted_intents or [])
+        bl_skills = frozenset(sess.blacklisted_skills or [])
+        results = [_calc_nebulento_intent(utt, container, bl_intents, bl_skills)
+                   for utt in utterances]
         # INTENT-4 §8.5 — disabled intents are excluded from match candidacy
         results = [r for r in results
                    if r is not None and r.name not in self.disabled_intents]
@@ -469,15 +480,20 @@ class HierarchicalNebulentoPipeline(NebulentoPipeline):
 @lru_cache(maxsize=128)  # covers burst of multiple ASR hypotheses without thrashing
 def _calc_nebulento_intent(utt: str,
                            container: IntentContainer,
-                           sess: Session) -> Optional[NebulentoIntent]:
-    """Match one utterance against the container, respecting session blacklists."""
+                           blacklisted_intents: frozenset = frozenset(),
+                           blacklisted_skills: frozenset = frozenset()) -> Optional[NebulentoIntent]:
+    """Match one utterance against the container, respecting session blacklists.
+
+    The session blacklists are passed as hashable frozensets so this stays
+    ``lru_cache``-able (Session is unhashable under ovos-bus-client>=2.4.0a1).
+    """
     try:
         result = container.calc_intent(utt)
         if result is None or not result.get("name"):
             return None
-        if result["name"] in sess.blacklisted_intents:
+        if result["name"] in blacklisted_intents:
             return None
-        if result["name"].split(":")[0] in sess.blacklisted_skills:
+        if result["name"].split(":")[0] in blacklisted_skills:
             return None
         return NebulentoIntent(
             name=result["name"],

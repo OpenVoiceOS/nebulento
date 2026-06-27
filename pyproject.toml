@@ -15,13 +15,13 @@ requires-python = ">=3.8"
 dependencies = [
     "rapidfuzz",
     "quebra_frases",
-    "ovos-spec-tools>=0.11.0a1",
+    "ovos-spec-tools>=0.16.1a2",
     "ovos-utils",
 ]
 
 [project.optional-dependencies]
 ovos = [
-    "ovos-bus-client",
+    "ovos-bus-client>=2.4.0a1",
     "ovos-config",
     "ovos-plugin-manager",
     "ovos-utils",
@@ -37,7 +37,7 @@ benchmark = [
 dev = [
     "pytest",
     "pytest-cov",
-    "ovos-bus-client",
+    "ovos-bus-client>=2.4.0a1",
     "ovos-config",
     "ovos-plugin-manager",
     "ovos-utils",
