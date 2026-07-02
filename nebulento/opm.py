@@ -10,6 +10,7 @@ from ovos_bus_client.session import SessionManager, Session
 from ovos_config.config import Configuration
 from ovos_plugin_manager.templates.pipeline import ConfidenceMatcherPipeline, IntentHandlerMatch
 from ovos_spec_tools import SpecMessage, closest_lang, standardize_lang
+from ovos_spec_tools.context import gate_satisfied
 from ovos_utils import flatten_list
 from ovos_utils.fakebus import FakeBus
 from ovos_utils.log import LOG
@@ -110,7 +111,36 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
         # INTENT-4 §8.5 — intents disabled without losing their definition;
         # excluded from match candidacy until re-enabled.
         self.disabled_intents: set = set()
+        # OVOS-CONTEXT-1 §6 — per-intent gating contracts, keyed by the
+        # internal ``skill_id:name`` label. Declarations are optional; absent
+        # keys mean "no gate". gate_satisfied() enforces liveness/scope/decay.
+        self.requires_context: Dict[str, list] = {}
+        self.excludes_context: Dict[str, list] = {}
         LOG.debug("Loaded Nebulento pipeline")
+
+    def _store_context_gates(self, name: str, message) -> None:
+        """Record OVOS-CONTEXT-1 gating contracts declared on registration.
+
+        ``requires_context``/``excludes_context`` are each an optional list of
+        bare-string keys or ``{"key", "scope"}`` mappings. Stored verbatim and
+        handed to :func:`gate_satisfied` at match time.
+        """
+        requires = message.data.get("requires_context")
+        excludes = message.data.get("excludes_context")
+        if requires:
+            self.requires_context[name] = requires
+        if excludes:
+            self.excludes_context[name] = excludes
+
+    def _context_gate_ok(self, name: str, sess) -> bool:
+        """OVOS-CONTEXT-1 §6 gate for candidate intent *name* under *sess*."""
+        requires = self.requires_context.get(name)
+        excludes = self.excludes_context.get(name)
+        if not requires and not excludes:
+            return True
+        skill_id = name.split(":")[0]
+        return gate_satisfied(sess.intent_context or {}, requires, excludes,
+                              owner_id=skill_id)
 
     def train(self, message=None):
         """No training required — emit trained signal immediately."""
@@ -195,6 +225,7 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
             return
         name = message.data["name"]
         self.registered_intents.append(name)
+        self._store_context_gates(name, message)
         container = self.containers[lang]
         try:
             self._register_object(
@@ -255,6 +286,7 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
                         f"empty samples")
             return
         self.registered_intents.append(name)
+        self._store_context_gates(name, message)
         container = self.containers[lang]
         try:
             self._add_intent(container, name, samples)
@@ -324,6 +356,8 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
     def _detach_intent(self, intent_name: str):
         if intent_name in self.registered_intents:
             self.registered_intents.remove(intent_name)
+            self.requires_context.pop(intent_name, None)
+            self.excludes_context.pop(intent_name, None)
             for container in self.containers.values():
                 self._remove_intent(container, intent_name)
 
@@ -389,6 +423,9 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
         # INTENT-4 §8.5 — disabled intents are excluded from match candidacy
         results = [r for r in results
                    if r is not None and r.name not in self.disabled_intents]
+        # OVOS-CONTEXT-1 §6 — drop candidates whose requires/excludes gate is
+        # not satisfied by the session's live intent_context.
+        results = [r for r in results if self._context_gate_ok(r.name, sess)]
         return max(results, key=lambda r: r.conf) if results else None
 
     def _get_closest_lang(self, lang: str) -> Optional[str]:

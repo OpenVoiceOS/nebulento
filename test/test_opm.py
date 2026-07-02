@@ -3,6 +3,7 @@ import unittest
 from unittest import mock
 
 from ovos_bus_client.message import Message
+from ovos_bus_client.session import Session
 
 from nebulento.opm import HierarchicalNebulentoPipeline, NebulentoPipeline
 
@@ -403,6 +404,117 @@ class TestNebulentoPipelineIntent4(unittest.TestCase):
         self.assertIn("ovos.intent.register.template", removed)
         self.assertIn("ovos.entity.register", removed)
         self.assertIn("ovos.intent.disable", removed)
+
+
+def _utt_msg(utt, session=None, lang="en-US"):
+    ctx = {"session": session.serialize()} if session is not None else {}
+    return Message("recognizer_loop:utterance",
+                   {"utterances": [utt], "lang": lang}, ctx)
+
+
+class TestNebulentoContextGating(unittest.TestCase):
+    """OVOS-CONTEXT-1 §6 requires_context / excludes_context gating."""
+
+    def setUp(self):
+        self.bus = mock.Mock()
+        self.pipeline = NebulentoPipeline(bus=self.bus, config={
+            "conf_high": 0.95, "conf_med": 0.8, "conf_low": 0.5,
+        })
+
+    def _session(self, intent_context):
+        s = Session("ctx-test")
+        s.intent_context = intent_context
+        return s
+
+    def test_requires_context_present_matches(self):
+        self.pipeline.register_intent(Message("padatious:register_intent", {
+            "name": "test_skill:HelloIntent",
+            "samples": ["hello"], "lang": "en-US",
+            "requires_context": ["game_active"],
+        }))
+        # private scope → stored under "<skill_id>:<key>"
+        sess = self._session({"test_skill:game_active": {"value": True}})
+        result = self.pipeline.match_high(["hello"], "en-US",
+                                          _utt_msg("hello", sess))
+        self.assertIsNotNone(result)
+        self.assertEqual(result.match_type, "test_skill:HelloIntent")
+
+    def test_requires_context_absent_drops(self):
+        self.pipeline.register_intent(Message("padatious:register_intent", {
+            "name": "test_skill:HelloIntent",
+            "samples": ["hello"], "lang": "en-US",
+            "requires_context": ["game_active"],
+        }))
+        sess = self._session({})  # required key not live
+        result = self.pipeline.match_high(["hello"], "en-US",
+                                          _utt_msg("hello", sess))
+        self.assertIsNone(result)
+
+    def test_excludes_context_present_drops(self):
+        self.pipeline.register_intent(Message("padatious:register_intent", {
+            "name": "test_skill:HelloIntent",
+            "samples": ["hello"], "lang": "en-US",
+            "excludes_context": ["muted"],
+        }))
+        sess = self._session({"test_skill:muted": {"value": True}})
+        result = self.pipeline.match_high(["hello"], "en-US",
+                                          _utt_msg("hello", sess))
+        self.assertIsNone(result)
+
+    def test_excludes_context_absent_matches(self):
+        self.pipeline.register_intent(Message("padatious:register_intent", {
+            "name": "test_skill:HelloIntent",
+            "samples": ["hello"], "lang": "en-US",
+            "excludes_context": ["muted"],
+        }))
+        sess = self._session({})
+        result = self.pipeline.match_high(["hello"], "en-US",
+                                          _utt_msg("hello", sess))
+        self.assertIsNotNone(result)
+
+    def test_no_gate_declared_always_matches(self):
+        self.pipeline.register_intent(Message("padatious:register_intent", {
+            "name": "test_skill:HelloIntent",
+            "samples": ["hello"], "lang": "en-US",
+        }))
+        result = self.pipeline.match_high(["hello"], "en-US",
+                                          _utt_msg("hello"))
+        self.assertIsNotNone(result)
+
+    def test_shared_scope_requires_context(self):
+        self.pipeline.register_intent(Message("padatious:register_intent", {
+            "name": "test_skill:HelloIntent",
+            "samples": ["hello"], "lang": "en-US",
+            "requires_context": [{"key": "party_mode", "scope": "shared"}],
+        }))
+        # shared scope → stored under the bare key
+        sess = self._session({"party_mode": {"value": True}})
+        result = self.pipeline.match_high(["hello"], "en-US",
+                                          _utt_msg("hello", sess))
+        self.assertIsNotNone(result)
+
+    def test_template_registration_stores_gates(self):
+        self.pipeline.handle_register_template(Message(
+            "ovos.intent.register.template", {
+                "skill_id": "test_skill", "intent_name": "HelloIntent",
+                "lang": "en-US", "samples": ["hello"],
+                "requires_context": ["game_active"],
+            }))
+        self.assertEqual(self.pipeline.requires_context.get("test_skill:HelloIntent"),
+                         ["game_active"])
+        sess = self._session({})
+        self.assertIsNone(self.pipeline.match_high(
+            ["hello"], "en-US", _utt_msg("hello", sess)))
+
+    def test_detach_clears_gates(self):
+        self.pipeline.register_intent(Message("padatious:register_intent", {
+            "name": "test_skill:HelloIntent",
+            "samples": ["hello"], "lang": "en-US",
+            "requires_context": ["game_active"],
+        }))
+        self.pipeline.handle_detach_intent(
+            Message("detach_intent", {"intent_name": "test_skill:HelloIntent"}))
+        self.assertNotIn("test_skill:HelloIntent", self.pipeline.requires_context)
 
 
 if __name__ == "__main__":
