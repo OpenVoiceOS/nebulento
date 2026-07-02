@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.0a1](https://github.com/OpenVoiceOS/nebulento/tree/0.9.0a1) (2026-07-02)
+
+[Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.8.0a1...0.9.0a1)
+
+**Merged pull requests:**
+
+- feat: enforce OVOS-CONTEXT-1 requires/excludes\_context gating [\#36](https://github.com/OpenVoiceOS/nebulento/pull/36) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.8.0a1](https://github.com/OpenVoiceOS/nebulento/tree/0.8.0a1) (2026-06-27)
 
 [Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.7.0a1...0.8.0a1)
