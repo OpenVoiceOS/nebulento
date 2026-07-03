@@ -15,7 +15,7 @@ requires-python = ">=3.10"
 dependencies = [
     "rapidfuzz",
     "quebra_frases",
-    "ovos-spec-tools>=1.4.0a1",
+    "ovos-spec-tools>=1.5.0a1",
     "ovos-utils",
 ]
 

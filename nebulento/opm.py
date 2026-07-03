@@ -1,5 +1,6 @@
 """Intent service wrapping Nebulento."""
 
+import re
 from functools import lru_cache
 from os.path import isfile
 from typing import Optional, Dict, List, Union
@@ -10,7 +11,7 @@ from ovos_bus_client.session import SessionManager, Session
 from ovos_config.config import Configuration
 from ovos_plugin_manager.templates.pipeline import ConfidenceMatcherPipeline, IntentHandlerMatch
 from ovos_spec_tools import SpecMessage, closest_lang, standardize_lang
-from ovos_spec_tools.context import gate_satisfied
+from ovos_spec_tools.context import context_slot_candidates, gate_satisfied
 from ovos_utils import flatten_list
 from ovos_utils.fakebus import FakeBus
 from ovos_utils.log import LOG
@@ -116,6 +117,11 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
         # keys mean "no gate". gate_satisfied() enforces liveness/scope/decay.
         self.requires_context: Dict[str, list] = {}
         self.excludes_context: Dict[str, list] = {}
+        # OVOS-INTENT-2 §4.3 — per-intent slot blacklists, keyed by the
+        # internal ``skill_id:name`` label then by slot name. A slot bound by
+        # the utterance to a blacklisted value is treated as UNRESOLVED, so
+        # OVOS-CONTEXT-1 §7 context fill can supply the intended value instead.
+        self.slot_blacklists: Dict[str, Dict[str, list]] = {}
         LOG.debug("Loaded Nebulento pipeline")
 
     def _store_context_gates(self, name: str, message) -> None:
@@ -131,6 +137,94 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
             self.requires_context[name] = requires
         if excludes:
             self.excludes_context[name] = excludes
+
+    def _store_slot_blacklist(self, name: str, message) -> None:
+        """Record OVOS-INTENT-2 §4.3 per-slot value exclusions from registration.
+
+        The payload carries a ``slot_blacklist`` (or legacy ``blacklist``) field:
+        a mapping of slot name -> list of excluded values. Stored verbatim and
+        enforced at match time by :meth:`_apply_context_slots`.
+        """
+        blacklist = message.data.get("slot_blacklist") or message.data.get("blacklist")
+        if isinstance(blacklist, dict) and blacklist:
+            self.slot_blacklists[name] = {
+                slot: list(values) for slot, values in blacklist.items()
+            }
+
+    @staticmethod
+    def _value_blacklisted(values, blacklist) -> bool:
+        """True when any bound *values* matches a *blacklist* entry.
+
+        Matching is whole-word-sequence: a blacklisted phrase must appear as a
+        run of complete words within the bound value, so ``"cast"`` does not
+        exclude ``"podcast"``.
+        """
+        if not blacklist:
+            return False
+        for value in values if isinstance(values, (list, tuple)) else [values]:
+            text = str(value).lower()
+            for bad in blacklist:
+                if re.search(r"\b" + re.escape(str(bad).lower()) + r"\b", text):
+                    return True
+        return False
+
+    @staticmethod
+    def _strip_words(text: str, words) -> str:
+        """Remove whole-word occurrences of *words* from *text*."""
+        out = text.lower()
+        for word in words:
+            out = re.sub(r"\b" + re.escape(str(word).lower()) + r"\b", " ", out)
+        return re.sub(r"\s+", " ", out).strip()
+
+    def _apply_context_slots(self, intent: "NebulentoIntent", container,
+                             sess) -> None:
+        """Enforce §4.3 blacklists then apply OVOS-CONTEXT-1 §7 context fill.
+
+        For every declared slot of the matched intent: drop a value the
+        utterance bound to a blacklisted entry (leaving the slot UNRESOLVED),
+        then fill any still-unresolved slot from a live ``intent_context`` entry
+        (private ``<skill_id>:name`` before shared bare ``name``). Utterance
+        values that survive the blacklist always win over context candidates.
+
+        Fill is *prematch injection*: the candidate values are spliced into the
+        utterance (blacklisted words removed first) and the intent re-scored, so
+        a slot supplied purely by context raises confidence exactly as if the
+        speaker had uttered it. The context value is then the authoritative
+        binding for that slot.
+        """
+        skill_id = intent.name.split(":")[0]
+        slot_names = container.slot_names(intent.name)
+        if not slot_names:
+            return
+
+        blacklist = self.slot_blacklists.get(intent.name, {})
+        matches = dict(intent.matches)
+        dropped_words: List[str] = []
+        for slot in slot_names:
+            values = matches.get(slot)
+            if values and self._value_blacklisted(values, blacklist.get(slot)):
+                matches.pop(slot)
+                dropped_words += [str(v) for v in
+                                  (values if isinstance(values, (list, tuple))
+                                   else [values])]
+
+        candidates = context_slot_candidates(sess.intent_context or {},
+                                             slot_names, owner_id=skill_id)
+        # unresolved by any surviving utterance value → eligible for context
+        fills = {slot: value for slot, value in candidates.items()
+                 if not matches.get(slot)}
+
+        if fills:
+            augmented = self._strip_words(intent.sent, dropped_words)
+            augmented = (augmented + " " +
+                         " ".join(str(v) for v in fills.values())).strip()
+            rescored = container.calc_intent(augmented)
+            if rescored and rescored.get("name") == intent.name:
+                intent.conf = rescored["conf"]
+            for slot, value in fills.items():
+                matches[slot] = value
+
+        intent.matches = matches
 
     def _context_gate_ok(self, name: str, sess) -> bool:
         """OVOS-CONTEXT-1 §6 gate for candidate intent *name* under *sess*."""
@@ -226,6 +320,7 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
         name = message.data["name"]
         self.registered_intents.append(name)
         self._store_context_gates(name, message)
+        self._store_slot_blacklist(name, message)
         container = self.containers[lang]
         try:
             self._register_object(
@@ -271,8 +366,8 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
         """Consume ``ovos.intent.register.template`` (INTENT-4 §6).
 
         Template intents are nebulento's native definition method. The payload
-        carries inline ``samples`` (OVOS-INTENT-1 templates); ``blacklist`` is a
-        suppression hint nebulento does not yet honour and is ignored.
+        carries inline ``samples`` (OVOS-INTENT-1 templates) and an optional
+        per-slot ``slot_blacklist`` (OVOS-INTENT-2 §4.3) enforced at match time.
         """
         lang = standardize_lang(message.data.get("lang", self.lang))
         if lang not in self.containers:
@@ -287,6 +382,7 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
             return
         self.registered_intents.append(name)
         self._store_context_gates(name, message)
+        self._store_slot_blacklist(name, message)
         container = self.containers[lang]
         try:
             self._add_intent(container, name, samples)
@@ -358,6 +454,7 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
             self.registered_intents.remove(intent_name)
             self.requires_context.pop(intent_name, None)
             self.excludes_context.pop(intent_name, None)
+            self.slot_blacklists.pop(intent_name, None)
             for container in self.containers.values():
                 self._remove_intent(container, intent_name)
 
@@ -426,7 +523,12 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
         # OVOS-CONTEXT-1 §6 — drop candidates whose requires/excludes gate is
         # not satisfied by the session's live intent_context.
         results = [r for r in results if self._context_gate_ok(r.name, sess)]
-        return max(results, key=lambda r: r.conf) if results else None
+        if not results:
+            return None
+        best = max(results, key=lambda r: r.conf)
+        # OVOS-INTENT-2 §4.3 blacklist + OVOS-CONTEXT-1 §7 context slot fill.
+        self._apply_context_slots(best, container, sess)
+        return best
 
     def _get_closest_lang(self, lang: str) -> Optional[str]:
         if not self.containers:

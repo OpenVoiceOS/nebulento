@@ -46,6 +46,11 @@ class IntentContainer:
         self.ignore_case = ignore_case
         self.registered_intents: Dict[str, List[str]] = {}
         self.registered_entities: Dict[str, List[str]] = {}
+        #: OVOS-CONTEXT-1 §7 — per-intent slot-name index, built at
+        #: registration by parsing ``{name}`` placeholders out of the intent's
+        #: templates. Names every declarable slot so context fill can offer a
+        #: candidate for each, independent of ``requires_context``.
+        self.intent_slots: Dict[str, List[str]] = {}
         self.available_contexts: Dict[str, Dict[str, object]] = {}
         self.required_contexts: Dict[str, List[str]] = {}
         self.excluded_contexts: Dict[str, List[str]] = {}
@@ -57,6 +62,15 @@ class IntentContainer:
     def intent_names(self) -> List[str]:
         """Names of all currently registered intents."""
         return list(self.registered_intents)
+
+    def slot_names(self, intent_name: str) -> List[str]:
+        """Return the declared ``{slot}`` names for *intent_name*.
+
+        The names drive OVOS-CONTEXT-1 §7 context fill: every declared slot is
+        eligible for a context-supplied value, whether or not it is gated by
+        ``requires_context``.  Empty list when the intent is unknown or slotless.
+        """
+        return self.intent_slots.get(intent_name, [])
 
     # ── internal helpers ────────────────────────────────────────────────────
 
@@ -96,6 +110,15 @@ class IntentContainer:
             for e in expand_template(normalize_example(line))
         }
         self.registered_intents[name] = list(expanded)
+        # Index every {slot} placeholder declared across the templates so
+        # OVOS-CONTEXT-1 §7 fill can offer a context candidate for each.
+        slots: List[str] = []
+        for sample in expanded:
+            for slot in re.findall(r"\{(\w+)\}", sample):
+                slot = slot.lower()
+                if slot not in slots:
+                    slots.append(slot)
+        self.intent_slots[name] = slots
 
     def remove_intent(self, name: str) -> None:
         """Unregister an intent.  Silently does nothing if *name* is not registered.
@@ -104,6 +127,7 @@ class IntentContainer:
             name: Intent identifier to remove.
         """
         self.registered_intents.pop(name, None)
+        self.intent_slots.pop(name, None)
 
     def add_entity(self, name: str, lines: List[str]) -> None:
         """Register an entity with sample values used to boost match confidence.

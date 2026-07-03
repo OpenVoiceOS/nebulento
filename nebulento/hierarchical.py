@@ -153,6 +153,19 @@ class HierarchicalIntentContainer:
         if domain_name in self.domains:
             self.domains[domain_name].remove_entity(entity_name)
 
+    def slot_names(self, intent_name: str) -> List[str]:
+        """Return the declared ``{slot}`` names for *intent_name*.
+
+        Searches every domain's sub-container, since an intent lives under a
+        single domain but callers address it by its flat name.  Drives
+        OVOS-CONTEXT-1 §7 context fill.  Empty list when unknown or slotless.
+        """
+        for domain in self.domains.values():
+            slots = domain.slot_names(intent_name)
+            if slots:
+                return slots
+        return []
+
     # ── query API ──────────────────────────────────────────────────────────
 
     def calc_domain(self, query: str) -> MatchResult:
