@@ -517,5 +517,82 @@ class TestNebulentoContextGating(unittest.TestCase):
         self.assertNotIn("test_skill:HelloIntent", self.pipeline.requires_context)
 
 
+class TestNebulentoContextSlotFill(unittest.TestCase):
+    """OVOS-CONTEXT-1 §7 uniform slot fill + OVOS-INTENT-2 §4.3 blacklist."""
+
+    def setUp(self):
+        self.bus = mock.Mock()
+        self.pipeline = NebulentoPipeline(bus=self.bus, config={
+            "conf_high": 0.95, "conf_med": 0.8, "conf_low": 0.5,
+        })
+        # {song} slot, NO requires_context — §7 fill is independent of gating
+        self.pipeline.register_intent(_register_intent_msg(
+            "music_skill:PlayIntent",
+            ["play {song}", "put on {song}"],
+        ))
+        self.pipeline.register_entity(_register_entity_msg(
+            "song", ["jazz", "rock", "the beatles", "podcast"]))
+
+    def _session(self, intent_context):
+        s = Session("slot-test")
+        s.intent_context = intent_context
+        return s
+
+    def _play(self, utt, intent_context):
+        sess = self._session(intent_context)
+        return self.pipeline.match_low([utt], "en-US", _utt_msg(utt, sess))
+
+    def test_slot_filled_from_context_without_requires(self):
+        # utterance leaves {song} unresolved; live context entry supplies it
+        result = self._play("play", {"music_skill:song": {"value": "jazz"}})
+        self.assertIsNotNone(result)
+        self.assertEqual(result.match_data.get("song"), "jazz")
+
+    def test_utterance_value_wins_over_context(self):
+        # utterance binds {song}=rock; context offers jazz but must not override
+        result = self._play("play rock", {"music_skill:song": {"value": "jazz"}})
+        self.assertIsNotNone(result)
+        self.assertEqual(result.match_data.get("song"), ["rock"])
+
+    def test_shared_scope_fills_slot(self):
+        # bare (shared) key, no owner prefix
+        result = self._play("play", {"song": {"value": "rock"}})
+        self.assertIsNotNone(result)
+        self.assertEqual(result.match_data.get("song"), "rock")
+
+    def test_dead_context_entry_does_not_fill(self):
+        # expired entry (turns_remaining == 0) is not live: no injection, so
+        # bare "play" never clears the confidence floor
+        result = self._play("play", {"music_skill:song":
+                                     {"value": "jazz", "turns_remaining": 0}})
+        self.assertIsNone(result)
+
+    def test_blacklisted_value_unresolved_then_context_fills(self):
+        # utterance binds {song}=rock, but rock is blacklisted → unresolved →
+        # §7 context fill supplies jazz instead
+        self.pipeline.slot_blacklists["music_skill:PlayIntent"] = {"song": ["rock"]}
+        result = self._play("play rock", {"music_skill:song": {"value": "jazz"}})
+        self.assertIsNotNone(result)
+        self.assertEqual(result.match_data.get("song"), "jazz")
+
+    def test_blacklist_whole_word_sequence_only(self):
+        # "cast" must not blacklist "podcast"
+        self.pipeline.slot_blacklists["music_skill:PlayIntent"] = {"song": ["cast"]}
+        result = self._play("play podcast", {})
+        self.assertIsNotNone(result)
+        self.assertEqual(result.match_data.get("song"), ["podcast"])
+
+    def test_flag_context_only_gates_no_slot_named(self):
+        # a requires_context flag with no matching slot name never fills a slot
+        self.pipeline.register_intent(_register_intent_msg(
+            "music_skill:StopIntent", ["stop"],
+        ))
+        self.pipeline.requires_context["music_skill:StopIntent"] = ["playing"]
+        sess = self._session({"music_skill:playing": {"value": True}})
+        result = self.pipeline.match_low(["stop"], "en-US", _utt_msg("stop", sess))
+        self.assertIsNotNone(result)
+        self.assertEqual(result.match_data, {})
+
+
 if __name__ == "__main__":
     unittest.main()
