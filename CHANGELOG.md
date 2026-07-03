@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.0a1](https://github.com/OpenVoiceOS/nebulento/tree/0.10.0a1) (2026-07-03)
+
+[Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.9.0a1...0.10.0a1)
+
+**Merged pull requests:**
+
+- feat: OVOS-CONTEXT-1 §7 context slot fill + OVOS-INTENT-2 §4.3 blacklist [\#38](https://github.com/OpenVoiceOS/nebulento/pull/38) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.9.0a1](https://github.com/OpenVoiceOS/nebulento/tree/0.9.0a1) (2026-07-02)
 
 [Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.8.0a1...0.9.0a1)
@@ -58,19 +66,19 @@
 
 ## [0.3.0a4](https://github.com/OpenVoiceOS/nebulento/tree/0.3.0a4) (2026-05-13)
 
-[Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.3.0a2...0.3.0a4)
+[Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.3.0a3...0.3.0a4)
 
 **Merged pull requests:**
 
 - Feat/ovoscope e2e tests [\#21](https://github.com/OpenVoiceOS/nebulento/pull/21) ([JarbasAl](https://github.com/JarbasAl))
 
-## [0.3.0a2](https://github.com/OpenVoiceOS/nebulento/tree/0.3.0a2) (2026-05-13)
-
-[Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.3.0a3...0.3.0a2)
-
 ## [0.3.0a3](https://github.com/OpenVoiceOS/nebulento/tree/0.3.0a3) (2026-05-13)
 
-[Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.3.0a1...0.3.0a3)
+[Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.3.0a2...0.3.0a3)
+
+## [0.3.0a2](https://github.com/OpenVoiceOS/nebulento/tree/0.3.0a2) (2026-05-13)
+
+[Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.3.0a1...0.3.0a2)
 
 **Merged pull requests:**
 
