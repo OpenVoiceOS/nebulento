@@ -52,7 +52,7 @@ if "my_intent" in container.intent_names:
 container.add_intent("my_intent", samples)
 ```
 
-**Fix (OVOS plugin):** The `NebulentoPipeline.register_intent` handler already catches this case and suppresses the error if the intent is present in the container (`nebulento/opm.py:145-148`). If you are seeing the error from the plugin, it means the intent was registered by a different container or the `registered_intents` tracking list is out of sync — file a bug.
+**Fix (OVOS plugin):** The `NebulentoPipeline.register_intent` handler already catches this case and suppresses the error if the intent is present in the container (`nebulento/opm.py:145-148`). If you are seeing the error from the plugin, it means the intent was registered by a different container, or the `registered_intents` tracking list is out of sync. File a bug.
 
 ---
 
@@ -106,7 +106,7 @@ The plugin normalises tags via `ovos_utils.lang.standardize_lang_tag` and uses `
 
 **Cause explained:** The cache is designed for burst ASR hypothesis deduplication within a single request. Across requests, LRU eviction (128 entries) and the variety of utterances means stale hits are rare in practice.
 
-**Fix if this is a problem:** Call `_calc_nebulento_intent.cache_clear()` after bulk intent registration. This is not exposed as a public API; it is an implementation detail.
+**Fix if this is a problem:** Call `_calc_nebulento_intent.cache_clear()` after bulk intent registration. This is not exposed as a public API. It is an implementation detail.
 
 ---
 
@@ -116,7 +116,7 @@ The plugin normalises tags via `ovos_utils.lang.standardize_lang_tag` and uses `
 
 **Cause:** Consumed/remainder classification is word-based using `quebra_frases.word_tokenize` and set membership (`if w not in sent_tokens`). Words in the utterance that are not also in the best-matching training template are classified as remainder, even if they are semantically part of the intent.
 
-This is expected behaviour — the remainder field indicates words not covered by the winning template. Use it as a signal that the templates may need to be broadened, not as a bug indicator.
+This is expected behaviour. The remainder field indicates words not covered by the winning template. Use it as a signal that the templates may need to be broadened, not as a bug indicator.
 
 ---
 
@@ -134,6 +134,9 @@ if any(c not in avail for c in contexts):
 
 Common mistakes:
 
-- Calling `require_context("my_intent", "ctx")` but checking `calc_intent` before `set_context("my_intent", "ctx")` is called — this should suppress correctly.
-- Using the wrong `intent_name` key — must match the name used in `add_intent` exactly.
+- Calling `require_context("my_intent", "ctx")` but checking `calc_intent` before `set_context("my_intent", "ctx")` is called. This should suppress correctly.
+- Using the wrong `intent_name` key. Must match the name used in `add_intent` exactly.
 - Forgetting that `available_contexts` is keyed by intent name, not globally. Setting a context for one intent does not affect other intents.
+
+---
+[← Benchmark](benchmark.md) · [Home](index.md)

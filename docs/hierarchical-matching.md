@@ -2,8 +2,8 @@
 
 `HierarchicalIntentContainer` (`nebulento/hierarchical.py:10`) provides a two-stage matching architecture. Intents are grouped into named *domains*. Matching proceeds in two stages:
 
-1. **Domain classification** — the utterance is scored against a top-level `IntentContainer` that represents domains, not individual intents.
-2. **Intent matching** — once a domain is selected, the utterance is scored only against intents registered within that domain.
+1. **Domain classification**: the utterance is scored against a top-level `IntentContainer` that represents domains, not individual intents.
+2. **Intent matching**: once a domain is selected, the utterance is scored only against intents registered within that domain.
 
 ---
 
@@ -29,10 +29,10 @@ This contrasts with `IntentContainer`, which scores the utterance against every 
 
 Two-stage routing is one of two ways to organise intents by topic:
 
-- **Domain (parallel)** — every domain is scored independently and the global best wins. No domain is excluded up front.
-- **Hierarchical (two-stage)** — a top-level classifier picks one domain, and only that domain's intents are scored.
+- **Domain (parallel)**: every domain is scored independently and the global best wins. No domain is excluded up front.
+- **Hierarchical (two-stage)**: a top-level classifier picks one domain, and only that domain's intents are scored.
 
-`HierarchicalIntentContainer` is the two-stage variant, named to match Adapt's `HierarchicalIntentDeterminationEngine` and palavreado's `HierarchicalIntentContainer`. nebulento does not ship a separate parallel-Domain container — its flat `IntentContainer` already scores every intent independently, so a parallel-domain grouping would behave identically to it.
+`HierarchicalIntentContainer` is the two-stage variant, named to match Adapt's `HierarchicalIntentDeterminationEngine` and palavreado's `HierarchicalIntentContainer`. nebulento does not ship a separate parallel-Domain container. Its flat `IntentContainer` already scores every intent independently, so a parallel-domain grouping would behave identically to it.
 
 ---
 
@@ -41,14 +41,14 @@ Two-stage routing is one of two ways to organise intents by topic:
 Use it when:
 
 - You have many intents spanning clearly separable topics (media, home automation, calendar, etc.).
-- The training templates in different domains contain overlapping vocabulary (e.g. "set" appears in both timer and thermostat intents) — scoping to one domain stops cross-domain bleed.
+- The training templates in different domains contain overlapping vocabulary. For example, "set" appears in both timer and thermostat intents. Scoping to one domain stops cross-domain bleed.
 - You want a confidence gate that rejects utterances no domain recognises (see [Off-topic rejection](#off-topic-rejection)).
 
 Avoid it when:
 
 - Intent boundaries do not map cleanly to domains.
-- Each domain has too few samples for the top-level classifier to learn from — sparse domains classify poorly.
-- You have fewer than ~10 intents total — the overhead is unnecessary.
+- Each domain has too few samples for the top-level classifier to learn from. Sparse domains classify poorly.
+- You have fewer than ~10 intents total. The overhead is unnecessary.
 
 ---
 
@@ -74,7 +74,7 @@ d.register_domain_intent("home", "lights_off", ["lights off", "turn off the ligh
 d.register_domain_intent("home", "thermostat", ["set thermostat to {temp}", "change temperature to {temp}"])
 ```
 
-The top-level domain classifier is **trained automatically**: every sample passed to `register_domain_intent` is also fed to `domain_engine` under its domain name (`nebulento/hierarchical.py:90`). There is no separate training step — the container works standalone as soon as intents are registered.
+The top-level domain classifier is **trained automatically**: every sample passed to `register_domain_intent` is also fed to `domain_engine` under its domain name (`nebulento/hierarchical.py:90`). There is no separate training step. The container works standalone as soon as intents are registered.
 
 ### 3. Register domain entities (optional)
 
@@ -121,7 +121,7 @@ print(domain_match["conf"])  # confidence for the domain match
 
 ## Off-topic rejection
 
-By default (`domain_threshold=0.0`) every query is routed to its best-scoring domain — there is no rejection at the domain stage, and a confident intent match still depends on the per-intent `conf`.
+By default (`domain_threshold=0.0`) every query is routed to its best-scoring domain. There is no rejection at the domain stage, and a confident intent match still depends on the per-intent `conf`.
 
 Set `domain_threshold` to reject utterances no domain recognises well:
 
@@ -129,9 +129,9 @@ Set `domain_threshold` to reject utterances no domain recognises well:
 d = HierarchicalIntentContainer(domain_threshold=0.6)
 ```
 
-When the top-level classifier's best domain scores below the threshold, `calc_intent` returns a no-match (`name=None`) without resolving any intent. This trades recall for precision — a real command whose domain is misclassified becomes unrecoverable, but off-topic speech that shares words with a domain is filtered out.
+When the top-level classifier's best domain scores below the threshold, `calc_intent` returns a no-match (`name=None`) without resolving any intent. This trades recall for precision. A real command whose domain is misclassified becomes unrecoverable, but off-topic speech that shares words with a domain is filtered out.
 
-The right threshold depends on the `MatchStrategy`: lenient strategies such as `TOKEN_SET_RATIO` score loosely and need a higher gate; strict strategies such as `DAMERAU_LEVENSHTEIN_SIMILARITY` already reject off-topic input via low `conf` and gain little from the gate. See [Benchmark](benchmark.md) for measured precision/recall trade-offs.
+The right threshold depends on the `MatchStrategy`. Lenient strategies such as `TOKEN_SET_RATIO` score loosely and need a higher gate. Strict strategies such as `DAMERAU_LEVENSHTEIN_SIMILARITY` already reject off-topic input via low `conf` and gain little from the gate. See [Benchmark](benchmark.md) for measured precision/recall trade-offs.
 
 ---
 
@@ -142,7 +142,7 @@ from nebulento import HierarchicalIntentContainer, MatchStrategy
 
 d = HierarchicalIntentContainer(fuzzy_strategy=MatchStrategy.DAMERAU_LEVENSHTEIN_SIMILARITY)
 
-# Register intents — the domain classifier is trained automatically
+# Register intents. The domain classifier is trained automatically
 d.register_domain_intent("media", "play",      ["play {artist}", "put on {artist}"])
 d.register_domain_intent("media", "pause",     ["pause", "stop"])
 d.register_domain_intent("calendar", "add",    ["add event {title}", "schedule {title}"])
@@ -199,3 +199,6 @@ HierarchicalIntentContainer
 ```
 
 Each per-domain `IntentContainer` is independent. Context gating, keyword exclusions, and entity registrations are scoped to the domain container where they are registered.
+
+---
+[← OVOS Pipeline Plugin](ovos-plugin.md) · [Home](index.md) · [Configuration →](configuration.md)

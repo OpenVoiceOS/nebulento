@@ -93,7 +93,7 @@ container.add_entity("song", ["jazz", "rock", "classical music", "the blues"])
 
 | Parameter | Type | Description |
 |---|---|---|
-| `name` | `str` | Entity name. Case-insensitive; stored lowercase. |
+| `name` | `str` | Entity name. Case-insensitive. Stored lowercase. |
 | `lines` | `List[str]` | Sample values. Alternation syntax `(a\|b)` is expanded. |
 
 Raises `RuntimeError` if `name` is already registered.
@@ -148,7 +148,7 @@ result = container.calc_intent("play some jazz")
 |---|---|---|
 | `query` | `str` | Raw utterance to evaluate. |
 
-**Returns** `MatchResult` — a `Dict[str, object]` with the following keys:
+**Returns** `MatchResult`, a `Dict[str, object]` with the following keys:
 
 | Key | Type | Description |
 |---|---|---|
@@ -196,8 +196,8 @@ for r in container.calc_intents("play some jazz"):
 
 Context gating allows intents to be conditionally suppressed based on named application state. The context system has two axes:
 
-- **Required contexts** — the intent only fires when all required contexts are active.
-- **Excluded contexts** — the intent is suppressed when any excluded context is active.
+- **Required contexts**: the intent only fires when all required contexts are active.
+- **Excluded contexts**: the intent is suppressed when any excluded context is active.
 
 Contexts are stored per intent name. Multiple requirements or exclusions can be stacked.
 
@@ -236,7 +236,7 @@ container.unset_context("confirm_delete", "delete_pending")
 
 `nebulento/container.py:160`
 
-Gate `intent_name` so it only matches when `context_name` is active. Multiple calls accumulate — all named contexts must be satisfied simultaneously.
+Gate `intent_name` so it only matches when `context_name` is active. Multiple calls accumulate. All named contexts must be satisfied at the same time.
 
 ```python
 container.require_context("confirm_delete", "delete_pending")
@@ -295,7 +295,7 @@ Single-word keywords use whole-word matching against the tokenised query. Multi-
 container.add_intent("play_music", ["play some music", "start the music"])
 container.exclude_keywords("play_music", ["video", "movie", "film"])
 
-# Suppressed — "video" appears:
+# Suppressed, "video" appears:
 result = container.calc_intent("play a video")
 print(result["name"])  # some other intent or None
 
@@ -313,7 +313,7 @@ print(result["name"])  # 'play_music'
 
 ### Internal Methods
 
-These are documented for completeness; prefer the public API above.
+These are documented for completeness. Prefer the public API above.
 
 #### `match_entities(sentence) -> Dict[str, List[str]]`
 
@@ -347,7 +347,7 @@ HierarchicalIntentContainer(
 )
 ```
 
-`fuzzy_strategy` and `ignore_case` are forwarded to every `IntentContainer` created internally, including `domain_engine`. `domain_threshold` is the minimum confidence the top-level classifier must reach for a query to be routed at all — below it `calc_intent` returns a no-match. `0.0` (default) disables the gate.
+`fuzzy_strategy` and `ignore_case` are forwarded to every `IntentContainer` created internally, including `domain_engine`. `domain_threshold` is the minimum confidence the top-level classifier must reach for a query to be routed at all. Below it, `calc_intent` returns a no-match. `0.0` (default) disables the gate.
 
 ### Public Attributes
 
@@ -356,7 +356,7 @@ HierarchicalIntentContainer(
 | `domain_engine` | `IntentContainer` | Top-level classifier mapping queries to domain names. |
 | `domains` | `Dict[str, IntentContainer]` | Per-domain containers keyed by domain name. |
 | `training_data` | `Dict[str, List[str]]` | Raw training samples per domain (accumulated at registration). |
-| `domain_threshold` | `float` | Minimum classifier confidence to route a query; `0.0` disables the gate. |
+| `domain_threshold` | `float` | Minimum classifier confidence to route a query. `0.0` disables the gate. |
 
 ---
 
@@ -380,7 +380,7 @@ d.remove_domain("media")
 
 `nebulento/hierarchical.py:90`
 
-Register an intent inside a domain. Creates the domain's `IntentContainer` on first use, accumulates `intent_samples` into `training_data[domain_name]`, and retrains the top-level domain classifier — no separate classifier setup is needed.
+Register an intent inside a domain. Creates the domain's `IntentContainer` on first use, accumulates `intent_samples` into `training_data[domain_name]`, and retrains the top-level domain classifier. No separate classifier setup is needed.
 
 ```python
 d.register_domain_intent("media", "play", ["play {song}", "put on {song}"])
@@ -446,7 +446,7 @@ print(match["name"])  # 'media'
 
 Return the best-matching intent for `query`.
 
-If `domain` is `None`, the domain is inferred by calling `calc_domain`; when that domain scores below `domain_threshold`, a no-match result is returned. If the resolved or supplied domain has no registered intents, a no-match result is returned. Passing `domain` explicitly bypasses both the classifier and the threshold gate.
+If `domain` is `None`, the domain is inferred by calling `calc_domain`. When that domain scores below `domain_threshold`, `calc_intent` returns a no-match result. If the resolved or supplied domain has no registered intents, `calc_intent` also returns a no-match result. Passing `domain` explicitly bypasses both the classifier and the threshold gate.
 
 ```python
 # Auto-infer domain:
@@ -462,3 +462,6 @@ result = d.calc_intent("play some jazz", domain="media")
 | `domain` | `str \| None` | Domain to restrict matching to. `None` triggers automatic domain classification. |
 
 Returns a `MatchResult` dict (same structure as `IntentContainer.calc_intent`). `name` is `None` when no domain or intent matched.
+
+---
+[← Quick Start](quickstart.md) · [Home](index.md) · [Match Strategies →](strategies.md)

@@ -1,6 +1,6 @@
 # OVOS Pipeline Plugin
 
-Nebulento ships as a first-class OVOS pipeline plugin. The plugin class is `NebulentoPipeline` (`nebulento/opm.py:51`) and is registered under the entry point name `ovos-nebulento-pipeline-plugin`.
+Nebulento ships as an OVOS pipeline plugin. The plugin class is `NebulentoPipeline` (`nebulento/opm.py:51`) and is registered under the entry point name `ovos-nebulento-pipeline-plugin`.
 
 ---
 
@@ -41,9 +41,9 @@ Two plugins are shipped:
 | `NebulentoPipeline` | `IntentContainer` (flat) | `ovos-nebulento-pipeline-plugin` | `nebulento` |
 | `HierarchicalNebulentoPipeline` | `HierarchicalIntentContainer` (two-stage) | `ovos-nebulento-hierarchical-pipeline-plugin` | `nebulento_hierarchical` |
 
-`HierarchicalNebulentoPipeline` (`nebulento/opm.py:262`) is a subclass — it shares every bus handler, the confidence tiers, and the registration surface. The only difference is the container: each registered intent is filed under a domain equal to its `skill_id` (the `<skill_id>:<intent>` prefix), and at match time a top-level classifier picks the domain before the intent is resolved. See [Hierarchical Matching](hierarchical-matching.md).
+`HierarchicalNebulentoPipeline` (`nebulento/opm.py:262`) is a subclass. It shares every bus handler, the confidence tiers, and the registration surface. The only difference is the container. Each registered intent is filed under a domain equal to its `skill_id` (the `<skill_id>:<intent>` prefix), and at match time a top-level classifier picks the domain before the intent is resolved. See [Hierarchical Matching](hierarchical-matching.md).
 
-The two plugins can run side by side in the same OVOS instance — their config keys and entry points are distinct. Use the flat plugin by default; switch to the hierarchical one when you have many skills with lexically distinct vocabulary and want domain-scoped matching or the `domain_threshold` off-topic gate.
+The two plugins can run side by side in the same OVOS instance. Their config keys and entry points are distinct. Use the flat plugin by default. Switch to the hierarchical one when you have many skills with lexically distinct vocabulary and want domain-scoped matching or the `domain_threshold` off-topic gate.
 
 ---
 
@@ -84,10 +84,10 @@ Source: `nebulento/opm.py:81-85`.
 
 `register_intent` handles `padatious:register_intent` events. The message data may contain:
 
-- `file_name` — path to a `.intent` file with one template per line
-- `samples` — inline list of template strings (takes precedence over `file_name`)
-- `name` — intent identifier (typically `skill_id:intent_name`)
-- `lang` — BCP-47 language tag (defaults to the plugin's primary lang)
+- `file_name`: path to a `.intent` file with one template per line
+- `samples`: inline list of template strings (takes precedence over `file_name`)
+- `name`: intent identifier (typically `skill_id:intent_name`)
+- `lang`: BCP-47 language tag (defaults to the plugin's primary lang)
 
 If the language tag does not match any registered container (primary or secondary), the intent is silently ignored.
 
@@ -138,7 +138,7 @@ When `mycroft.skills.train` is received, the plugin emits `mycroft.skills.traine
 3. Scores each utterance via the cached `_calc_nebulento_intent` function.
 4. Returns the result with the highest confidence.
 
-`_calc_nebulento_intent` is decorated with `@lru_cache(maxsize=128)` (`nebulento/opm.py:223`) to avoid re-scoring identical utterances across multiple ASR hypotheses in a single request. Because `IntentContainer` is mutable and `lru_cache` requires hashable arguments, the container itself is the cache key — this works because `IntentContainer` identity is stable per language after startup.
+`_calc_nebulento_intent` is decorated with `@lru_cache(maxsize=128)` (`nebulento/opm.py:223`) to avoid re-scoring identical utterances across multiple ASR hypotheses in a single request. Because `IntentContainer` is mutable and `lru_cache` requires hashable arguments, the container itself is the cache key. This works because `IntentContainer` identity is stable per language after startup.
 
 Session blacklists are applied after scoring:
 
@@ -244,3 +244,6 @@ Nebulento reuses the `padatious:register_intent` / `padatious:register_entity` b
 `nebulento/opm.py:215`
 
 `shutdown()` removes all four bus event handlers. Called by OVOS when the pipeline plugin is unloaded.
+
+---
+[← Normalisation](normalisation.md) · [Home](index.md) · [Hierarchical Matching →](hierarchical-matching.md)

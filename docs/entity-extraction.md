@@ -35,7 +35,7 @@ Raises `RuntimeError` if the entity name (after lowercasing) is already register
 
 ## Detection During Matching
 
-`nebulento/container.py:251` — `match_entities(sentence)`
+`nebulento/container.py:251`: `match_entities(sentence)`
 
 Before scoring intents, `match_fuzzy` calls `match_entities` which scans the normalised utterance for registered entity samples using `quebra_frases.chunk`:
 
@@ -44,7 +44,7 @@ entities = self.match_entities(sentence)
 # {'colour': ['red'], 'room': [], 'direction': []}
 ```
 
-`quebra_frases.chunk` performs token-aware substring detection — it finds multi-word samples while respecting token boundaries so "green" does not match inside "evergreen".
+`quebra_frases.chunk` performs token-aware substring detection. It finds multi-word samples while respecting token boundaries, so "green" does not match inside "evergreen".
 
 ---
 
@@ -139,7 +139,7 @@ print(result["entities"])
 
 ---
 
-## No Entity Registered — Slot Left Unmatched
+## No Entity Registered: Slot Left Unmatched
 
 If a template contains `{slot}` but no entity named `slot` is registered, the slot is simply not filled. The confidence is not boosted and `entities` does not include that key:
 
@@ -148,7 +148,10 @@ container.add_intent("buy", ["buy {item}"])
 # No add_entity("item", ...) call
 
 result = container.calc_intent("buy milk")
-print(result["entities"])  # {}  — slot present in template but no entity registered
+print(result["entities"])  # {}  (slot present in template but no entity registered)
 ```
 
 The fuzzy match still runs against `"buy {item}"` as a literal template string. This works but the `{item}` substring reduces the similarity score compared to a template with the literal word.
+
+---
+[← Template Syntax](template-syntax.md) · [Home](index.md) · [Normalisation →](normalisation.md)

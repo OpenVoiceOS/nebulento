@@ -12,7 +12,7 @@ container = IntentContainer(fuzzy_strategy=MatchStrategy.TOKEN_SET_RATIO)
 
 ## Benchmark Summary
 
-Evaluated on the English subset of `OpenVoiceOS/intents-for-eval` — 1750 test utterances across 50 intents (1700 match, 50 off-topic). See [Benchmark](benchmark.md) for the full methodology.
+Evaluated on the English subset of `OpenVoiceOS/intents-for-eval`: 1750 test utterances across 50 intents (1700 match, 50 off-topic). See [Benchmark](benchmark.md) for the full methodology.
 
 | Strategy | Accuracy | Precision | Recall | F1 | False Positives |
 |---|---|---|---|---|---|
@@ -26,7 +26,7 @@ Evaluated on the English subset of `OpenVoiceOS/intents-for-eval` — 1750 test 
 | `PARTIAL_TOKEN_RATIO` | 44.1% | 93.9% | 45.4% | 0.612 | 50 / 50 |
 | `PARTIAL_TOKEN_SET_RATIO` | 44.1% | 93.9% | 45.4% | 0.612 | 50 / 50 |
 
-Latency: a few ms per utterance for most strategies; `SIMPLE_RATIO` (difflib) is far slower than `RATIO` for the same accuracy — prefer `RATIO`.
+Latency is a few ms per utterance for most strategies. `SIMPLE_RATIO` (difflib) is far slower than `RATIO` for the same accuracy, so prefer `RATIO`.
 
 ---
 
@@ -34,21 +34,21 @@ Latency: a few ms per utterance for most strategies; `SIMPLE_RATIO` (difflib) is
 
 ### `SIMPLE_RATIO`
 
-`nebulento/fuzz.py:23` — maps to `SequenceMatcher(None, x, against).ratio()` (difflib fallback path, i.e. when no other branch matches).
+`nebulento/fuzz.py:23` maps to `SequenceMatcher(None, x, against).ratio()` (difflib fallback path, used when no other branch matches).
 
 **What it measures:** Character-level Levenshtein ratio between two strings. Counts the number of matching characters as a fraction of the total characters in both strings.
 
-**When to use:** Good general-purpose baseline. Handles spelling errors moderately well. Not sensitive to word order — transposed words lower the score.
+**When to use:** Good general-purpose baseline. Handles spelling errors moderately well. Not sensitive to word order. Transposed words lower the score.
 
 **False positive risk:** Medium. Strings sharing many characters (common function words, short strings) can score surprisingly high.
 
-**Benchmark:** Accuracy 72.9%, Precision 96.9%, F1 0.842, 40 / 50 false positives. Tied for the highest F1, but slow (difflib) — `RATIO` gives the same accuracy faster.
+**Benchmark:** Accuracy 72.9%, Precision 96.9%, F1 0.842, 40 / 50 false positives. Tied for the highest F1, but slow (difflib). `RATIO` gives the same accuracy faster.
 
 ---
 
 ### `RATIO`
 
-`nebulento/fuzz.py:63` — maps to `rapidfuzz.fuzz.ratio`.
+`nebulento/fuzz.py:63` maps to `rapidfuzz.fuzz.ratio`.
 
 **What it measures:** Identical to `SIMPLE_RATIO` in effect: character-level Levenshtein ratio, computed via rapidfuzz (faster than difflib for long strings).
 
@@ -56,13 +56,13 @@ Latency: a few ms per utterance for most strategies; `SIMPLE_RATIO` (difflib) is
 
 **False positive risk:** Medium.
 
-**Benchmark:** Accuracy 72.9%, Precision 96.9%, F1 0.842, 40 / 50 false positives. Highest F1, and fast — the recommended general-purpose strategy.
+**Benchmark:** Accuracy 72.9%, Precision 96.9%, F1 0.842, 40 / 50 false positives. Highest F1, and fast. The recommended general-purpose strategy.
 
 ---
 
 ### `PARTIAL_RATIO`
 
-`nebulento/fuzz.py:65` — maps to `rapidfuzz.fuzz.partial_ratio`.
+`nebulento/fuzz.py:65` maps to `rapidfuzz.fuzz.partial_ratio`.
 
 **What it measures:** Best alignment of the shorter string as a substring within the longer string. A short query can match a long template with a high score even if most of the template's words are absent from the query.
 
@@ -74,7 +74,7 @@ Latency: a few ms per utterance for most strategies; `SIMPLE_RATIO` (difflib) is
 
 ### `TOKEN_SORT_RATIO`
 
-`nebulento/fuzz.py:67` — maps to `rapidfuzz.fuzz.token_sort_ratio`.
+`nebulento/fuzz.py:67` maps to `rapidfuzz.fuzz.token_sort_ratio`.
 
 **What it measures:** Both strings are tokenised and tokens are sorted alphabetically before applying the character-level ratio. Identical sets of words in different orders receive the same score.
 
@@ -88,7 +88,7 @@ Latency: a few ms per utterance for most strategies; `SIMPLE_RATIO` (difflib) is
 
 ### `TOKEN_SET_RATIO`
 
-`nebulento/fuzz.py:69` — maps to `rapidfuzz.fuzz.token_set_ratio`.
+`nebulento/fuzz.py:69` maps to `rapidfuzz.fuzz.token_set_ratio`.
 
 **What it measures:** Splits both strings into token sets. The score is the maximum of several comparisons: the intersection alone, intersection + sorted remainder of each string. Very tolerant of extra or missing words.
 
@@ -102,7 +102,7 @@ Latency: a few ms per utterance for most strategies; `SIMPLE_RATIO` (difflib) is
 
 ### `PARTIAL_TOKEN_RATIO`
 
-`nebulento/fuzz.py:75` — maps to `rapidfuzz.fuzz.partial_token_ratio`.
+`nebulento/fuzz.py:75` maps to `rapidfuzz.fuzz.partial_token_ratio`.
 
 **What it measures:** Token-split variant of `PARTIAL_RATIO`. Applies partial substring matching to the token-level representation.
 
@@ -114,7 +114,7 @@ Latency: a few ms per utterance for most strategies; `SIMPLE_RATIO` (difflib) is
 
 ### `PARTIAL_TOKEN_SORT_RATIO`
 
-`nebulento/fuzz.py:71` — maps to `rapidfuzz.fuzz.partial_token_sort_ratio`.
+`nebulento/fuzz.py:71` maps to `rapidfuzz.fuzz.partial_token_sort_ratio`.
 
 **What it measures:** Token-sort then partial substring match.
 
@@ -126,7 +126,7 @@ Latency: a few ms per utterance for most strategies; `SIMPLE_RATIO` (difflib) is
 
 ### `PARTIAL_TOKEN_SET_RATIO`
 
-`nebulento/fuzz.py:73` — maps to `rapidfuzz.fuzz.partial_token_set_ratio`.
+`nebulento/fuzz.py:73` maps to `rapidfuzz.fuzz.partial_token_set_ratio`.
 
 **What it measures:** Token-set then partial substring match.
 
@@ -138,13 +138,13 @@ Latency: a few ms per utterance for most strategies; `SIMPLE_RATIO` (difflib) is
 
 ### `DAMERAU_LEVENSHTEIN_SIMILARITY`
 
-`nebulento/fuzz.py:77` — maps to `rapidfuzz.distance.DamerauLevenshtein.normalized_similarity`.
+`nebulento/fuzz.py:77` maps to `rapidfuzz.distance.DamerauLevenshtein.normalized_similarity`.
 
 **What it measures:** Edit distance between two strings counting insertions, deletions, substitutions, and transpositions (adjacent character swaps). Normalised to `[0.0, 1.0]` by string length. Transposition awareness means "teh" vs "the" scores higher than with plain Levenshtein.
 
 **When to use:** Production deployments where false positives matter. This is the default strategy. Handles spelling errors and typos while keeping the lowest false-positive count of any fuzzy strategy.
 
-**False positive risk:** Low. 17 / 50 on the benchmark dataset — far below the other fuzzy strategies (40–50 / 50).
+**False positive risk:** Low. 17 / 50 on the benchmark dataset, far below the other fuzzy strategies (40-50 / 50).
 
 **Benchmark:** Accuracy 69.2%, Precision 98.6%, Recall 69.3%, F1 0.814, 17 / 50 false positives.
 
@@ -178,7 +178,7 @@ c = IntentContainer()
 strategy = MatchStrategy["TOKEN_SET_RATIO"]
 c = IntentContainer(fuzzy_strategy=strategy)
 
-# As IntEnum value — strategies can be compared and sorted:
+# As IntEnum value, strategies can be compared and sorted:
 print(MatchStrategy.DAMERAU_LEVENSHTEIN_SIMILARITY.name)
 # 'DAMERAU_LEVENSHTEIN_SIMILARITY'
 ```
@@ -196,3 +196,6 @@ The `NebulentoPipeline` OVOS plugin reads strategy from `mycroft.conf` by name:
 ```
 
 An unknown strategy name falls back to `DAMERAU_LEVENSHTEIN_SIMILARITY` with a warning. Source: `nebulento/opm.py:72`.
+
+---
+[← Intent API](intent-api.md) · [Home](index.md) · [Template Syntax →](template-syntax.md)
