@@ -12,7 +12,13 @@
 pip install nebulento
 ```
 
-This installs the core library and the OVOS pipeline plugin entry point. `rapidfuzz` and `quebra_frases` are pulled in as hard dependencies.
+This installs the core library only. `rapidfuzz`, `quebra_frases`, and `ovos-spec-tools` are pulled in as hard dependencies.
+
+For the OVOS pipeline plugin entry point, install the `ovos` extra:
+
+```bash
+pip install "nebulento[ovos]"
+```
 
 ## From Source
 
