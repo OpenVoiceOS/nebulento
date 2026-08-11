@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.0a3](https://github.com/OpenVoiceOS/nebulento/tree/0.10.0a3) (2026-08-11)
+
+[Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.10.0a2...0.10.0a3)
+
+**Merged pull requests:**
+
+- docs: clarify that the OVOS pipeline plugin needs the \[ovos\] extra [\#41](https://github.com/OpenVoiceOS/nebulento/pull/41) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.10.0a2](https://github.com/OpenVoiceOS/nebulento/tree/0.10.0a2) (2026-08-11)
 
 [Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.10.0a1...0.10.0a2)
