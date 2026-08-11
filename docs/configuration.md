@@ -46,14 +46,14 @@ Valid values:
 | Value | Notes |
 |---|---|
 | `"SIMPLE_RATIO"` | Character-level Levenshtein ratio (difflib) |
-| `"RATIO"` | rapidfuzz ratio — effectively same as `SIMPLE_RATIO` |
-| `"PARTIAL_RATIO"` | Substring match — high FP risk |
+| `"RATIO"` | rapidfuzz ratio, effectively same as `SIMPLE_RATIO` |
+| `"PARTIAL_RATIO"` | Substring match, high FP risk |
 | `"TOKEN_SORT_RATIO"` | Sorted tokens, word-order insensitive |
-| `"TOKEN_SET_RATIO"` | Set intersection — highest recall, most FP |
+| `"TOKEN_SET_RATIO"` | Set intersection, highest recall, most FP |
 | `"PARTIAL_TOKEN_RATIO"` | Not recommended for intent gating |
 | `"PARTIAL_TOKEN_SORT_RATIO"` | Not recommended for intent gating |
 | `"PARTIAL_TOKEN_SET_RATIO"` | Not recommended for intent gating |
-| `"DAMERAU_LEVENSHTEIN_SIMILARITY"` | Default — zero FP on benchmark |
+| `"DAMERAU_LEVENSHTEIN_SIMILARITY"` | Default, zero FP on benchmark |
 
 An unrecognised value falls back to `"DAMERAU_LEVENSHTEIN_SIMILARITY"` with a warning logged.
 
@@ -67,7 +67,7 @@ An unrecognised value falls back to `"DAMERAU_LEVENSHTEIN_SIMILARITY"` with a wa
 | Default | `0.95` |
 | Source | `nebulento/opm.py:65` |
 
-Confidence threshold for `match_high`. Intents with `conf > conf_high` are returned at this tier. The OVOS pipeline tries this tier first; a high-confidence match prevents lower-priority engines from running.
+Confidence threshold for `match_high`. Intents with `conf > conf_high` are returned at this tier. The OVOS pipeline tries this tier first. A high-confidence match prevents lower-priority engines from running.
 
 ---
 
@@ -91,7 +91,7 @@ Confidence threshold for `match_medium`. Intents with `conf > conf_med` are retu
 | Default | `0.50` |
 | Source | `nebulento/opm.py:67` |
 
-Confidence threshold for `match_low`. This is the lowest tier; matches above this threshold are returned only if `match_high` and `match_medium` both returned nothing. Setting this too low increases the risk of spurious intent matches.
+Confidence threshold for `match_low`. This is the lowest tier. Matches above this threshold are returned only if `match_high` and `match_medium` both returned nothing. Setting this too low increases the risk of spurious intent matches.
 
 ---
 
@@ -117,7 +117,7 @@ If all utterances in a request exceed `max_words`, `calc_intent` returns `None` 
 | Default | `0.0` |
 | Source | `nebulento/opm.py:284` |
 
-Only read by `HierarchicalNebulentoPipeline` under the `nebulento_hierarchical` key. Minimum confidence the top-level domain classifier must reach for a query to be routed to a domain. When the best domain scores below this value the query is rejected with no intent match. `0.0` (default) disables the gate — every query is routed to its best domain and rejection is left to the `conf_*` tiers. Raising it trades recall for precision. See [Hierarchical Matching](hierarchical-matching.md#off-topic-rejection).
+Only read by `HierarchicalNebulentoPipeline` under the `nebulento_hierarchical` key. Minimum confidence the top-level domain classifier must reach for a query to be routed to a domain. When the best domain scores below this value the query is rejected with no intent match. `0.0` (default) disables the gate. Every query is routed to its best domain and rejection is left to the `conf_*` tiers. Raising it trades recall for precision. See [Hierarchical Matching](hierarchical-matching.md#off-topic-rejection).
 
 ---
 
@@ -161,3 +161,6 @@ c = IntentContainer(
 ```
 
 See [Intent API](intent-api.md) for the full constructor reference.
+
+---
+[← Hierarchical Matching](hierarchical-matching.md) · [Home](index.md) · [Benchmark →](benchmark.md)

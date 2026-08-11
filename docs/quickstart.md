@@ -10,7 +10,7 @@ from nebulento import IntentContainer, MatchStrategy
 container = IntentContainer(fuzzy_strategy=MatchStrategy.TOKEN_SET_RATIO)
 ```
 
-The default strategy is `DAMERAU_LEVENSHTEIN_SIMILARITY`. `TOKEN_SET_RATIO` is used here for higher recall; see [Match Strategies](strategies.md) for trade-offs.
+The default strategy is `DAMERAU_LEVENSHTEIN_SIMILARITY`. `TOKEN_SET_RATIO` is used here for higher recall. See [Match Strategies](strategies.md) for the trade-offs.
 
 ## 2. Register Intents
 
@@ -33,11 +33,11 @@ container.add_intent("goodbye", [
 
 Templates support:
 
-- `(a|b|c)` — alternation; expands to one variant per combination at registration time
-- `[word]` — optional word or phrase (equivalent to `(word|)`)
-- `{entity}` — capture slot matched against registered entity samples
+- `(a|b|c)`: alternation. Expands to one variant per combination at registration time.
+- `[word]`: optional word or phrase (equivalent to `(word|)`)
+- `{entity}`: capture slot matched against registered entity samples
 
-All variants are expanded and stored immediately; there is no separate training step.
+All variants are expanded and stored immediately. There is no separate training step.
 
 ## 3. Register Entities
 
@@ -114,7 +114,7 @@ Restrict an intent so it only fires when a condition is active:
 ```python
 container.require_context("goodbye", "conversation_started")
 
-# Before context is set — intent is suppressed:
+# Before context is set, intent is suppressed:
 result = container.calc_intent("goodbye")
 print(result["name"])  # None
 
@@ -138,9 +138,12 @@ d = HierarchicalIntentContainer()
 d.register_domain_intent("media", "play", ["play {song}", "put on {song}"])
 d.register_domain_intent("home",  "lights_on", ["lights on", "turn on the lights"])
 
-# the domain classifier is trained automatically — no extra step needed
+# the domain classifier is trained automatically, no extra step needed
 result = d.calc_intent("turn on the lights please")
 print(result["name"])  # 'lights_on'
 ```
 
 See [Hierarchical Matching](hierarchical-matching.md) for a detailed guide.
+
+---
+[← Installation](installation.md) · [Home](index.md) · [Intent API →](intent-api.md)

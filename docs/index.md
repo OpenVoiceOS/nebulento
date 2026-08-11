@@ -8,11 +8,11 @@ Nebulento finds the closest matching intent by comparing an utterance against al
 
 Key design choices:
 
-- **No training step** — intents are registered as template strings and are available immediately. There is no model to train or reload.
-- **Template expansion at registration time** — `(a|b)` alternation and `[optional]` syntax are fully expanded into concrete strings when `add_intent` is called.
-- **Configurable similarity strategy** — nine `MatchStrategy` values map to distinct rapidfuzz scorers (plus a difflib fallback), each with a different precision/recall trade-off.
-- **Entity extraction** — `{slot}` placeholders in templates are paired with registered entity samples. When a registered value appears in the utterance the confidence is boosted and the value is returned in `entities`.
-- **Context gating** — intents can be conditionally suppressed or required based on named active contexts, or blocked when specific keywords appear in the query.
+- **No training step**: intents are registered as template strings and are available immediately. There is no model to train or reload.
+- **Template expansion at registration time**: `(a|b)` alternation and `[optional]` syntax are fully expanded into concrete strings when `add_intent` is called.
+- **Configurable similarity strategy**: nine `MatchStrategy` values map to distinct rapidfuzz scorers (plus a difflib fallback), each with a different precision/recall trade-off.
+- **Entity extraction**: `{slot}` placeholders in templates are paired with registered entity samples. When a registered value appears in the utterance, the confidence is boosted and the value is returned in `entities`.
+- **Context gating**: intents can be conditionally suppressed or required based on named active contexts, or blocked when specific keywords appear in the query.
 
 The package ships both a standalone Python library and an OVOS pipeline plugin (`NebulentoPipeline`) that integrates with the OpenVoiceOS skill framework.
 

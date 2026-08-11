@@ -51,7 +51,7 @@ expand_template("(turn|switch) (on|off) the lights")
 #  'turn off the lights', 'turn on the lights']
 ```
 
-Nesting is handled by repeated application of the expansion loop until the result stabilises (`fully_expand`). Empty alternatives are valid: `(a|)` expands to `['', 'a']` (i.e. the phrase with and without that word).
+Nesting is handled by repeated application of the expansion loop until the result stabilises (`fully_expand`). Empty alternatives are valid. `(a|)` expands to `['', 'a']`, the phrase with and without that word.
 
 ---
 
@@ -74,7 +74,7 @@ expand_template("[please] turn [the] lights on")
 
 ## Entity Slots: `{name}`
 
-Curly-brace tokens are entity capture placeholders. They survive template expansion unchanged — `expand_template` does not fill them. The fuzzy matcher uses them in two ways:
+Curly-brace tokens are entity capture placeholders. They survive template expansion unchanged. `expand_template` does not fill them. The fuzzy matcher uses them in two ways:
 
 1. **Confidence boosting** (`nebulento/container.py:308-311`): when the matched template contains `{name}` and a registered entity sample is found in the utterance, the confidence formula `score = 0.25 + score * 0.75` is applied, capping at 1.0.
 2. **Entity return** (`nebulento/container.py:313`): matched entity values are included in `result["entities"]`.
@@ -93,7 +93,7 @@ Entity slot names are stored and returned lowercase (`{k.lower(): v for k, v in 
 
 ## Double-Brace Normalisation
 
-`nebulento/bracket_expansion.py:33` — `clean_braces(example)`
+`nebulento/bracket_expansion.py:33`: `clean_braces(example)`
 
 Accidental double braces (`{{entity}}`) are normalised to single braces before any further processing. This is applied by `normalize_example`.
 
@@ -107,7 +107,7 @@ clean_braces("buy {{item}} now")
 
 ## Padatious Colon Syntax: `:0`
 
-`nebulento/bracket_expansion.py:45` — `translate_padatious(example)`
+`nebulento/bracket_expansion.py:45`: `translate_padatious(example)`
 
 Padatious intent files use `:0` as a word-slot token. `translate_padatious` converts each `:0` occurrence to a sequentially numbered `{wordN}` placeholder, so intent files written for Padatious work with Nebulento without modification.
 
@@ -139,9 +139,9 @@ container.add_intent("play", ["(play|play) music", "play music"])
 
 ---
 
-## `expand_slots` — Filling Slots with Entity Values
+## `expand_slots`: Filling Slots with Entity Values
 
-`nebulento/bracket_expansion.py:148` — `expand_slots(template, slots)`
+`nebulento/bracket_expansion.py:148`: `expand_slots(template, slots)`
 
 A utility function that first runs `expand_template` and then substitutes `{slot}` placeholders with every provided value, producing the Cartesian product.
 
@@ -165,8 +165,11 @@ Slots absent from the `slots` dict are left as-is (`{name}` unchanged in output)
 
 | Syntax | Meaning | Processed by |
 |---|---|---|
-| `(a\|b\|c)` | Alternation — Cartesian product of all groups | `expand_template` |
+| `(a\|b\|c)` | Alternation, Cartesian product of all groups | `expand_template` |
 | `[word]` | Optional word/phrase | `expand_template` (via `expand_optional`) |
 | `{name}` | Entity capture slot | Preserved through expansion; used at match time |
 | `{{name}}` | Accidental double brace | Normalised to `{name}` by `clean_braces` |
 | `:0` | Padatious word slot | Translated to `{word0}`, `{word1}`, … by `translate_padatious` |
+
+---
+[← Match Strategies](strategies.md) · [Home](index.md) · [Entity Extraction →](entity-extraction.md)

@@ -17,7 +17,7 @@ Steps:
 1. Replace all apostrophe variants with a single space (`_drop_apostrophes`).
 2. Collapse runs of whitespace to a single space and strip leading/trailing whitespace (`_normalize_whitespace`).
 
-Does **not** touch entity placeholder syntax — there are no `{...}` tokens in a plain utterance.
+Does **not** touch entity placeholder syntax. There are no `{...}` tokens in a plain utterance.
 
 ```python
 from nebulento.bracket_expansion import normalize_utterance
@@ -39,10 +39,10 @@ Normalise a training template for storage. Applied to each line before `expand_t
 
 Steps (in order):
 
-1. `clean_braces(example)` — `{{entity}}` → `{entity}`
-2. `translate_padatious(example)` — `:0` → `{word0}`, `{word1}`, …
-3. `_drop_apostrophes(text)` — all apostrophe variants → space
-4. `_normalize_whitespace(text)` — collapse whitespace
+1. `clean_braces(example)`: `{{entity}}` becomes `{entity}`
+2. `translate_padatious(example)`: `:0` becomes `{word0}`, `{word1}`, and so on
+3. `_drop_apostrophes(text)`: all apostrophe variants become a space
+4. `_normalize_whitespace(text)`: collapse whitespace
 
 Entity placeholders (`{name}`) are preserved through all steps.
 
@@ -128,7 +128,7 @@ normalize_utterance("it’s fine")   # RIGHT SINGLE QUOTATION MARK
 
 ## Case Handling
 
-`nebulento/container.py:61-69` — `IntentContainer._norm(text)`
+`nebulento/container.py:61-69`: `IntentContainer._norm(text)`
 
 `_norm` applies `normalize_utterance` and then optionally lowercases:
 
@@ -152,7 +152,7 @@ container = IntentContainer(ignore_case=False)
 
 ## Whitespace Collapsing
 
-`nebulento/bracket_expansion.py:28-30` — `_normalize_whitespace(text)`
+`nebulento/bracket_expansion.py:28-30`: `_normalize_whitespace(text)`
 
 Any run of one or more whitespace characters (spaces, tabs, newlines) is collapsed to a single ASCII space, and leading/trailing whitespace is stripped.
 
@@ -170,3 +170,6 @@ normalize_utterance("it's  great")
 # Step 1: "it s  great"  (apostrophe → space)
 # Step 2: "it s great"   (double space collapsed)
 ```
+
+---
+[← Entity Extraction](entity-extraction.md) · [Home](index.md) · [OVOS Plugin →](ovos-plugin.md)

@@ -58,3 +58,6 @@ result = c.calc_intent("hello")
 assert result["name"] == "hello"
 print("OK")
 ```
+
+---
+[Home](index.md) · [Quick Start →](quickstart.md)

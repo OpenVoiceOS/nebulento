@@ -1,8 +1,8 @@
 # Nebulento
 
-A lightweight fuzzy-matching intent parser built on [rapidfuzz](https://github.com/maxbachmann/rapidfuzz).
+Nebulento is a fuzzy-matching intent parser built on [rapidfuzz](https://github.com/maxbachmann/rapidfuzz).
 
-Finds the closest matching intent by comparing the utterance against all training sentences using configurable fuzzy similarity strategies. Handles spelling errors, word-order variation, contractions, and natural phrasing that exact-match parsers would miss. Best suited for small-to-medium intent sets (dozens to hundreds of training sentences per intent).
+Nebulento finds the closest matching intent by comparing an utterance against all training sentences with a configurable fuzzy similarity strategy. It handles spelling errors, word-order variation, contractions, and natural phrasing that exact-match parsers miss. Use it for small-to-medium intent sets: dozens to hundreds of training sentences per intent.
 
 ---
 
@@ -45,9 +45,9 @@ container.calc_intent("buy milk")
 
 | Syntax | Meaning |
 |---|---|
-| `(one\|of\|these)` | Alternation — expands to one variant per combination |
+| `(one\|of\|these)` | Alternation. Expands to one variant per combination |
 | `[optional]` | Optional word or phrase |
-| `{entity}` | Capture group — matched against registered entity samples |
+| `{entity}` | Capture group. Matched against registered entity samples |
 
 ---
 
@@ -57,11 +57,11 @@ Choose a strategy via `IntentContainer(fuzzy_strategy=MatchStrategy.X)`.
 
 | Strategy | Best for | FP risk |
 |---|---|---|
-| `DAMERAU_LEVENSHTEIN_SIMILARITY` | Spelling errors, lowest false-positive rate | Low — **default** |
+| `DAMERAU_LEVENSHTEIN_SIMILARITY` | Spelling errors, lowest false-positive rate | Low, **default** |
 | `RATIO` | Highest recall and F1, fast | High |
 | `TOKEN_SET_RATIO` | Natural phrasing, word-order variation | High |
 | `TOKEN_SORT_RATIO` | Same words, different order | High |
-| `PARTIAL_RATIO` | Substring presence — avoid for intent gating | Very high |
+| `PARTIAL_RATIO` | Substring presence. Avoid for intent gating | Very high |
 
 See [docs/strategies.md](docs/strategies.md) for the full comparison table and benchmark rows.
 
@@ -120,7 +120,7 @@ Entry point: `nebulento.opm:NebulentoPipeline`
 
 ## Benchmark
 
-Benchmarked on two OpenVoiceOS datasets — [`intents-for-eval`](https://huggingface.co/datasets/OpenVoiceOS/intents-for-eval) and [`massive`](https://huggingface.co/datasets/OpenVoiceOS/massive-templates). Results below are `intents-for-eval` (1750 utterances, 50 intents, 1700 match / 50 off-topic):
+Benchmarked on two OpenVoiceOS datasets: [`intents-for-eval`](https://huggingface.co/datasets/OpenVoiceOS/intents-for-eval) and [`massive`](https://huggingface.co/datasets/OpenVoiceOS/massive-templates). Results below are `intents-for-eval` (1750 utterances, 50 intents, 1700 match / 50 off-topic):
 
 | Engine | Accuracy | Precision | Recall | F1 | False positives | Median |
 |---|---|---|---|---|---|---|
