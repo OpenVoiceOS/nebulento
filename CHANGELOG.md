@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.0a2](https://github.com/OpenVoiceOS/nebulento/tree/0.10.0a2) (2026-08-11)
+
+[Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.10.0a1...0.10.0a2)
+
+**Merged pull requests:**
+
+- docs: rewrite README in Simplified Technical English [\#40](https://github.com/OpenVoiceOS/nebulento/pull/40) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.10.0a1](https://github.com/OpenVoiceOS/nebulento/tree/0.10.0a1) (2026-07-03)
 
 [Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.9.0a1...0.10.0a1)
