@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.1a1](https://github.com/OpenVoiceOS/nebulento/tree/0.10.1a1) (2026-08-11)
+
+[Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.10.0a3...0.10.1a1)
+
+**Merged pull requests:**
+
+- fix: tolerate malformed templates during intent registration [\#43](https://github.com/OpenVoiceOS/nebulento/pull/43) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.10.0a3](https://github.com/OpenVoiceOS/nebulento/tree/0.10.0a3) (2026-08-11)
 
 [Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.10.0a2...0.10.0a3)
