@@ -5,6 +5,7 @@ import logging
 from typing import Dict, Iterator, List, Optional
 
 from ovos_spec_tools import expand as expand_template
+from ovos_spec_tools.expansion import MalformedTemplate
 
 from nebulento.fuzz import MatchStrategy, match_one
 from nebulento.bracket_expansion import normalize_example, normalize_utterance
@@ -87,6 +88,36 @@ class IntentContainer:
 
     # ── registration ───────────────────────────────────────────────────────
 
+    @staticmethod
+    def _expand_or_literal(line: str, context: str) -> List[str]:
+        """Expand *line* via :func:`expand_template`, degrading gracefully.
+
+        ``expand_template`` (``ovos_spec_tools.expansion.expand_template``) is
+        deliberately strict per OVOS-INTENT-1 §3.6 — e.g. it rejects
+        single-branch groups like ``"cansad(e)"`` as :class:`MalformedTemplate`.
+        That strictness is spec-side and must not be relaxed. The engine,
+        however, must stay robust to arbitrary skill-authored templates: a
+        single malformed line must never abort registration of the whole
+        intent/entity. On :class:`MalformedTemplate`, log a warning and fall
+        back to using *line* verbatim as a single literal sample.
+
+        Args:
+            line: Already-normalised training/sample line to expand.
+            context: Human-readable identifier (e.g. ``"intent 'foo'"``) used
+                in the warning log to name the offending registration.
+
+        Returns:
+            List of expanded variants, or ``[line]`` if expansion failed.
+        """
+        try:
+            return list(expand_template(line))
+        except MalformedTemplate as e:
+            LOG.warning(
+                "malformed template in %s: %r (%s) - using literal line as fallback",
+                context, line, e,
+            )
+            return [line]
+
     def add_intent(self, name: str, lines: List[str]) -> None:
         """Register an intent with one or more training templates.
 
@@ -107,7 +138,7 @@ class IntentContainer:
         expanded = {
             self._norm(e)
             for line in lines
-            for e in expand_template(normalize_example(line))
+            for e in self._expand_or_literal(normalize_example(line), f"intent {name!r}")
         }
         self.registered_intents[name] = list(expanded)
         # Index every {slot} placeholder declared across the templates so
@@ -148,7 +179,7 @@ class IntentContainer:
         expanded = {
             self._norm(e)
             for line in lines
-            for e in expand_template(line)
+            for e in self._expand_or_literal(line, f"entity {name!r}")
         }
         self.registered_entities[name] = list(expanded)
 

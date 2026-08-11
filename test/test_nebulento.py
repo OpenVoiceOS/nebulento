@@ -678,5 +678,92 @@ class TestBracketExpansion(unittest.TestCase):
         self.assertEqual(result, ["hello world"])
 
 
+# ── malformed-template tolerance ───────────────────────────────────────────
+# Regression coverage for production reports (OpenVoiceOS/intents-for-eval):
+# a single-branch group like "cansad(e)" makes ovos_spec_tools.expand raise
+# MalformedTemplate. That strictness is deliberate spec-side behaviour and
+# must NOT be relaxed - but a malformed line in one intent must not abort
+# registration of the whole intent, drop the remaining lines, or leave
+# HierarchicalIntentContainer.training_data out of sync.
+
+class TestMalformedTemplateTolerance(unittest.TestCase):
+    def test_intent_registers_with_mixed_valid_and_malformed_lines(self):
+        c = IntentContainer()
+        # "estou cansad(e)" is malformed: single-branch group "(e)".
+        c.add_intent("mood", [
+            "estou (feliz|triste)",
+            "estou cansad(e)",
+            "sinto-me (bem|mal)",
+        ])
+        samples = c.registered_intents["mood"]
+        # valid lines fully expanded
+        self.assertIn("estou feliz", samples)
+        self.assertIn("estou triste", samples)
+        self.assertIn("sinto-me bem", samples)
+        self.assertIn("sinto-me mal", samples)
+        # malformed line retained literally rather than dropped
+        self.assertIn("estou cansad(e)", samples)
+
+    def test_malformed_line_realistic_unparenthesized_utterances_still_match(self):
+        # The actual degradation mode users hit: nobody types the literal
+        # "(e)" syntax - they type one of the unparenthesized surface forms
+        # the malformed group would have expanded to. The literal fallback
+        # sample still fuzzy-matches those forms with a solidly high score.
+        c = IntentContainer()
+        c.add_intent("mood", [
+            "estou (feliz|triste)",
+            "estou cansad(e)",
+            "sinto-me (bem|mal)",
+        ])
+        for utterance in ("estou cansade", "estou cansada", "estou cansado"):
+            r = c.calc_intent(utterance)
+            self.assertEqual(r["name"], "mood", utterance)
+            self.assertGreater(r["conf"], 0.75, f"{utterance}: conf={r['conf']}")
+
+    def test_malformed_line_matches_both_variant_and_literal(self):
+        c = IntentContainer()
+        c.add_intent("mood", [
+            "estou (feliz|triste)",
+            "estou cansad(e)",
+        ])
+        r = c.calc_intent("estou feliz")
+        self.assertEqual(r["name"], "mood")
+        r2 = c.calc_intent("estou cansad(e)")
+        self.assertEqual(r2["name"], "mood")
+        self.assertGreater(r2["conf"], 0.9)
+
+    def test_malformed_entity_line_does_not_abort_registration(self):
+        c = IntentContainer()
+        c.add_entity("mood_word", ["feliz", "triste", "cansad(e)"])
+        samples = c.registered_entities["mood_word"]
+        self.assertIn("feliz", samples)
+        self.assertIn("triste", samples)
+        self.assertIn("cansad(e)", samples)
+
+    def test_register_domain_intent_updates_training_data_despite_malformed_line(self):
+        d = HierarchicalIntentContainer()
+        d.register_domain_intent("emotions", "mood", [
+            "estou (feliz|triste)",
+            "estou cansad(e)",
+        ])
+        self.assertIn("emotions", d.training_data)
+        self.assertIn("mood", d.domains["emotions"].intent_names)
+        joined = " | ".join(d.training_data["emotions"])
+        self.assertIn("cansad(e)", joined)
+        # domain classifier can train without raising
+        r = d.calc_domain("estou feliz")
+        self.assertIsNotNone(r)
+        self.assertIn("name", r)
+
+    def test_register_domain_intent_matches_literal_malformed_line(self):
+        d = HierarchicalIntentContainer()
+        d.register_domain_intent("emotions", "mood", [
+            "estou (feliz|triste)",
+            "estou cansad(e)",
+        ])
+        r = d.calc_intent("estou cansad(e)", domain="emotions")
+        self.assertEqual(r["name"], "mood")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -83,6 +83,11 @@ def expand_template(template: str) -> List[str]:
 
     .. deprecated::
         Use :func:`ovos_spec_tools.expand` instead. This shim delegates to it.
+
+    Calls ``ovos_spec_tools.expand`` directly and raises ``MalformedTemplate``
+    on a malformed template — it does NOT get the literal-fallback tolerance
+    that :meth:`IntentContainer.add_intent`/``add_entity`` apply internally,
+    so callers importing this shim directly keep the strict spec behavior.
     """
     warnings.warn(
         "nebulento.bracket_expansion.expand_template is deprecated; "
@@ -99,6 +104,11 @@ def expand_slots(template: str, slots: Dict[str, List[str]]) -> List[str]:
 
     .. deprecated::
         Use :func:`ovos_spec_tools.expand` and substitute slots in caller code.
+
+    Calls ``ovos_spec_tools.expand`` directly and raises ``MalformedTemplate``
+    on a malformed template — it does NOT get the literal-fallback tolerance
+    that :meth:`IntentContainer.add_intent`/``add_entity`` apply internally,
+    so callers importing this shim directly keep the strict spec behavior.
     """
     warnings.warn(
         "nebulento.bracket_expansion.expand_slots is deprecated; "
