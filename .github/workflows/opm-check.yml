@@ -10,8 +10,8 @@ jobs:
     uses: OpenVoiceOS/gh-automations/.github/workflows/opm-check.yml@dev
     with:
       python_version: '3.11'
-      plugin_type: 'auto'
-      entry_point: '"ovos-nebulento-pipeline-plugin"'
+      plugin_type: 'pipeline'
+      install_extras: 'ovos'
       opm_require_found: true
       opm_validate_interface: true
       opm_test_import: true

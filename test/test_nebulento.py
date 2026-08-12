@@ -1,6 +1,6 @@
 import unittest
 
-from nebulento import IntentContainer, DomainIntentContainer, MatchStrategy
+from nebulento import IntentContainer, HierarchicalIntentContainer, MatchStrategy
 
 
 # ── helpers ────────────────────────────────────────────────────────────────
@@ -336,18 +336,22 @@ class TestEdgeCases(unittest.TestCase):
         self.assertEqual({s.name for s in MatchStrategy}, expected)
 
 
-# ── DomainIntentContainer ──────────────────────────────────────────────────
+# ── HierarchicalIntentContainer ────────────────────────────────────────────
 
-class TestDomainIntentContainer(unittest.TestCase):
+class TestHierarchicalIntentContainer(unittest.TestCase):
     def _build(self):
-        d = DomainIntentContainer()
+        d = HierarchicalIntentContainer()
         d.register_domain_intent("media", "play", ["play {song}", "play some music"])
         d.register_domain_intent("media", "pause", ["pause", "stop the music"])
         d.register_domain_intent("home", "lights_on", ["turn on the lights", "lights on"])
         d.register_domain_intent("home", "lights_off", ["turn off the lights", "lights off"])
-        d.domain_engine.add_intent("media", ["play music", "pause music", "next track"])
-        d.domain_engine.add_intent("home", ["lights on", "lights off", "thermostat"])
         return d
+
+    def test_domain_classifier_auto_trained(self):
+        d = self._build()
+        d.calc_domain("anything")  # first query rebuilds the lazy classifier
+        self.assertIn("media", d.domain_engine.intent_names)
+        self.assertIn("home", d.domain_engine.intent_names)
 
     def test_calc_intent_with_explicit_domain(self):
         d = self._build()
@@ -377,32 +381,52 @@ class TestDomainIntentContainer(unittest.TestCase):
         self.assertNotIn("pause", d.domains["media"].registered_intents)
 
     def test_remove_domain_entity(self):
-        d = DomainIntentContainer()
+        d = HierarchicalIntentContainer()
         d.register_domain_intent("media", "play", ["play {song}"])
         d.register_domain_entity("media", "song", ["jazz", "rock"])
         d.remove_domain_entity("media", "song")
         self.assertNotIn("song", d.domains["media"].registered_entities)
 
     def test_register_domain_entity(self):
-        d = DomainIntentContainer()
+        d = HierarchicalIntentContainer()
         d.register_domain_intent("media", "play", ["play {song}"])
         d.register_domain_entity("media", "song", ["jazz", "rock"])
         self.assertIn("song", d.domains["media"].registered_entities)
 
     def test_unknown_domain_returns_none_name(self):
-        d = DomainIntentContainer()
+        d = HierarchicalIntentContainer()
         r = d.calc_intent("hello", domain="nonexistent")
         self.assertIsNone(r["name"])
 
     def test_training_data_accumulates(self):
-        d = DomainIntentContainer()
+        d = HierarchicalIntentContainer()
         d.register_domain_intent("media", "play", ["play music"])
         d.register_domain_intent("media", "stop", ["stop music"])
         self.assertEqual(len(d.training_data["media"]), 2)
 
     def test_no_must_train_attribute(self):
-        d = DomainIntentContainer()
+        d = HierarchicalIntentContainer()
         self.assertFalse(hasattr(d, "must_train"))
+
+    def test_domain_threshold_gates_offtopic(self):
+        # an aggressive gate rejects a query that no domain matches well
+        d = HierarchicalIntentContainer(domain_threshold=0.99)
+        d.register_domain_intent("media", "play", ["play music"])
+        r = d.calc_intent("the weather is nice today")
+        self.assertIsNone(r["name"])
+
+    def test_domain_threshold_zero_routes_everything(self):
+        # default gate (0.0) routes every query to its best domain
+        d = HierarchicalIntentContainer(domain_threshold=0.0)
+        d.register_domain_intent("media", "play", ["play music"])
+        r = d.calc_intent("play music")
+        self.assertEqual(r["name"], "play")
+
+    def test_explicit_domain_bypasses_threshold(self):
+        d = HierarchicalIntentContainer(domain_threshold=0.99)
+        d.register_domain_intent("media", "play", ["play music"])
+        r = d.calc_intent("play music", domain="media")
+        self.assertEqual(r["name"], "play")
 
 
 # ── context gating ────────────────────────────────────────────────────────
@@ -652,6 +676,93 @@ class TestBracketExpansion(unittest.TestCase):
         from nebulento.bracket_expansion import expand_slots
         result = expand_slots("hello world", {})
         self.assertEqual(result, ["hello world"])
+
+
+# ── malformed-template tolerance ───────────────────────────────────────────
+# Regression coverage for production reports (OpenVoiceOS/intents-for-eval):
+# a single-branch group like "cansad(e)" makes ovos_spec_tools.expand raise
+# MalformedTemplate. That strictness is deliberate spec-side behaviour and
+# must NOT be relaxed - but a malformed line in one intent must not abort
+# registration of the whole intent, drop the remaining lines, or leave
+# HierarchicalIntentContainer.training_data out of sync.
+
+class TestMalformedTemplateTolerance(unittest.TestCase):
+    def test_intent_registers_with_mixed_valid_and_malformed_lines(self):
+        c = IntentContainer()
+        # "estou cansad(e)" is malformed: single-branch group "(e)".
+        c.add_intent("mood", [
+            "estou (feliz|triste)",
+            "estou cansad(e)",
+            "sinto-me (bem|mal)",
+        ])
+        samples = c.registered_intents["mood"]
+        # valid lines fully expanded
+        self.assertIn("estou feliz", samples)
+        self.assertIn("estou triste", samples)
+        self.assertIn("sinto-me bem", samples)
+        self.assertIn("sinto-me mal", samples)
+        # malformed line retained literally rather than dropped
+        self.assertIn("estou cansad(e)", samples)
+
+    def test_malformed_line_realistic_unparenthesized_utterances_still_match(self):
+        # The actual degradation mode users hit: nobody types the literal
+        # "(e)" syntax - they type one of the unparenthesized surface forms
+        # the malformed group would have expanded to. The literal fallback
+        # sample still fuzzy-matches those forms with a solidly high score.
+        c = IntentContainer()
+        c.add_intent("mood", [
+            "estou (feliz|triste)",
+            "estou cansad(e)",
+            "sinto-me (bem|mal)",
+        ])
+        for utterance in ("estou cansade", "estou cansada", "estou cansado"):
+            r = c.calc_intent(utterance)
+            self.assertEqual(r["name"], "mood", utterance)
+            self.assertGreater(r["conf"], 0.75, f"{utterance}: conf={r['conf']}")
+
+    def test_malformed_line_matches_both_variant_and_literal(self):
+        c = IntentContainer()
+        c.add_intent("mood", [
+            "estou (feliz|triste)",
+            "estou cansad(e)",
+        ])
+        r = c.calc_intent("estou feliz")
+        self.assertEqual(r["name"], "mood")
+        r2 = c.calc_intent("estou cansad(e)")
+        self.assertEqual(r2["name"], "mood")
+        self.assertGreater(r2["conf"], 0.9)
+
+    def test_malformed_entity_line_does_not_abort_registration(self):
+        c = IntentContainer()
+        c.add_entity("mood_word", ["feliz", "triste", "cansad(e)"])
+        samples = c.registered_entities["mood_word"]
+        self.assertIn("feliz", samples)
+        self.assertIn("triste", samples)
+        self.assertIn("cansad(e)", samples)
+
+    def test_register_domain_intent_updates_training_data_despite_malformed_line(self):
+        d = HierarchicalIntentContainer()
+        d.register_domain_intent("emotions", "mood", [
+            "estou (feliz|triste)",
+            "estou cansad(e)",
+        ])
+        self.assertIn("emotions", d.training_data)
+        self.assertIn("mood", d.domains["emotions"].intent_names)
+        joined = " | ".join(d.training_data["emotions"])
+        self.assertIn("cansad(e)", joined)
+        # domain classifier can train without raising
+        r = d.calc_domain("estou feliz")
+        self.assertIsNotNone(r)
+        self.assertIn("name", r)
+
+    def test_register_domain_intent_matches_literal_malformed_line(self):
+        d = HierarchicalIntentContainer()
+        d.register_domain_intent("emotions", "mood", [
+            "estou (feliz|triste)",
+            "estou cansad(e)",
+        ])
+        r = d.calc_intent("estou cansad(e)", domain="emotions")
+        self.assertEqual(r["name"], "mood")
 
 
 if __name__ == "__main__":

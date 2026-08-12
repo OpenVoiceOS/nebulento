@@ -1,11 +1,22 @@
-"""Template expansion and text normalisation utilities."""
+"""Template expansion and text normalisation utilities.
+
+Expansion delegates to :mod:`ovos_spec_tools`. The symbols here are kept as
+thin deprecation shims so downstream code keeps working.
+"""
 
 import itertools
 import re
+import warnings
 from typing import Dict, List
 
+from ovos_utils.log import deprecated
+from ovos_spec_tools import expand as _spec_expand
+
+from nebulento.version import VERSION_MAJOR
+
+_REMOVAL = f"{VERSION_MAJOR + 1}.0.0"
+
 # Apostrophe variants replaced with a space to preserve word boundaries.
-# "it's" → "it s" so both sides of a match normalise identically.
 _APOSTROPHES = (
     "'",   # U+0027 ASCII apostrophe
     "’",  # RIGHT SINGLE QUOTATION MARK
@@ -31,30 +42,12 @@ def _normalize_whitespace(text: str) -> str:
 
 
 def clean_braces(example: str) -> str:
-    """Normalise accidental double-braces: ``{{entity}}`` → ``{entity}``.
-
-    Args:
-        example: Raw training template string.
-
-    Returns:
-        Template with ``{{``/``}}`` collapsed to single braces.
-    """
+    """Normalise accidental double-braces: ``{{entity}}`` -> ``{entity}``."""
     return example.replace("{{", "{").replace("}}", "}")
 
 
 def translate_padatious(example: str) -> str:
-    """Translate Padatious ``:0`` word-slot tokens to ``{word0}`` entity syntax.
-
-    Allows intent files written for Padatious to be used with Nebulento without
-    modification.
-
-    Args:
-        example: Template string that may contain ``:0`` tokens.
-
-    Returns:
-        Template with each ``:0`` replaced by a sequentially numbered entity
-        placeholder ``{word0}``, ``{word1}``, etc.
-    """
+    """Translate Padatious ``:0`` word-slot tokens to ``{wordN}`` entity syntax."""
     if ":0" not in example:
         return example
     tokens = example.split()
@@ -66,110 +59,65 @@ def translate_padatious(example: str) -> str:
     return " ".join(tokens)
 
 
+def _lowercase_slots(text: str) -> str:
+    """Lowercase ``{Slot}`` placeholder names so they pass strict validators."""
+    return re.sub(r"\{([^\{\}]+)\}", lambda m: "{" + m.group(1).lower() + "}", text)
+
+
 def normalize_example(example: str) -> str:
-    """Normalise a training template for storage.
-
-    Applies ``clean_braces``, ``translate_padatious``, apostrophe-dropping, and
-    whitespace collapsing.  Entity placeholders (``{name}``) are preserved.
-
-    Args:
-        example: Raw training template string.
-
-    Returns:
-        Normalised template ready for ``expand_template``.
-    """
+    """Normalise a training template for storage."""
     text = clean_braces(translate_padatious(example))
     text = _drop_apostrophes(text)
+    text = _lowercase_slots(text)
     return _normalize_whitespace(text)
 
 
 def normalize_utterance(text: str) -> str:
-    """Normalise a plain query utterance for matching.
-
-    Applies apostrophe-dropping and whitespace collapsing.  Does **not** touch
-    entity placeholder syntax.
-
-    Args:
-        text: Raw utterance string (e.g. from STT output).
-
-    Returns:
-        Normalised utterance string.
-    """
+    """Normalise a plain query utterance for matching."""
     return _normalize_whitespace(_drop_apostrophes(text))
 
 
+@deprecated("use ovos_spec_tools.expand", _REMOVAL)
 def expand_template(template: str) -> List[str]:
     """Expand a template into all concrete string variants.
 
-    Handles:
-    - ``(one|of|these)`` alternation
-    - ``[optional]`` syntax (equivalent to ``(optional|)``)
-    - Nested combinations of the above
+    .. deprecated::
+        Use :func:`ovos_spec_tools.expand` instead. This shim delegates to it.
 
-    Args:
-        template: Template string, e.g. ``"(play|start) [some] {song}"``.
-
-    Returns:
-        Sorted list of all expanded variants with internal whitespace collapsed.
-
-    Example::
-
-        expand_template("(hi|hello) [there]")
-        # ["hello", "hello there", "hi", "hi there"]
+    Calls ``ovos_spec_tools.expand`` directly and raises ``MalformedTemplate``
+    on a malformed template — it does NOT get the literal-fallback tolerance
+    that :meth:`IntentContainer.add_intent`/``add_entity`` apply internally,
+    so callers importing this shim directly keep the strict spec behavior.
     """
-    def expand_optional(text: str) -> str:
-        return re.sub(r"\[([^\[\]]+)\]", lambda m: f"({m.group(1)}|)", text)
-
-    def expand_alternatives(text: str):
-        parts = []
-        for segment in re.split(r"(\([^\(\)]+\))", text):
-            if segment.startswith("(") and segment.endswith(")"):
-                parts.append(segment[1:-1].split("|"))
-            else:
-                parts.append([segment])
-        return itertools.product(*parts)
-
-    def fully_expand(texts):
-        result = set(texts)
-        while True:
-            expanded = {
-                re.sub(r" +", " ", "".join(option)).strip()
-                for text in result
-                for option in expand_alternatives(text)
-            }
-            if expanded == result:
-                break
-            result = expanded
-        return sorted(result)
-
-    return fully_expand([expand_optional(template)])
+    warnings.warn(
+        "nebulento.bracket_expansion.expand_template is deprecated; "
+        "use ovos_spec_tools.expand instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return list(_spec_expand(template))
 
 
+@deprecated("use ovos_spec_tools.expand", _REMOVAL)
 def expand_slots(template: str, slots: Dict[str, List[str]]) -> List[str]:
-    """Expand a template by substituting slot placeholders with sample values.
+    """Expand a template and substitute ``{slot}`` placeholders.
 
-    First expands alternation/optional syntax via :func:`expand_template`, then
-    fills each ``{slot}`` placeholder with every value in *slots*, producing the
-    Cartesian product of all combinations.
+    .. deprecated::
+        Use :func:`ovos_spec_tools.expand` and substitute slots in caller code.
 
-    Args:
-        template: Template string containing ``{slot}`` placeholders.
-        slots: Mapping of slot name → list of possible replacement strings.
-            Slots absent from *slots* are left as-is (``{name}`` unchanged).
-
-    Returns:
-        List of all fully-expanded concrete strings.
-
-    Example::
-
-        expand_slots("buy {item} from {shop}", {
-            "item": ["milk", "eggs"],
-            "shop": ["Tesco"],
-        })
-        # ["buy eggs from Tesco", "buy milk from Tesco"]
+    Calls ``ovos_spec_tools.expand`` directly and raises ``MalformedTemplate``
+    on a malformed template — it does NOT get the literal-fallback tolerance
+    that :meth:`IntentContainer.add_intent`/``add_entity`` apply internally,
+    so callers importing this shim directly keep the strict spec behavior.
     """
+    warnings.warn(
+        "nebulento.bracket_expansion.expand_slots is deprecated; "
+        "use ovos_spec_tools.expand instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     all_sentences: List[str] = []
-    for sentence in expand_template(template):
+    for sentence in _spec_expand(template):
         matches = re.findall(r"\{([^\{\}]+)\}", sentence)
         if matches:
             slot_options = [slots.get(m, [f"{{{m}}}"]) for m in matches]

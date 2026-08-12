@@ -11,24 +11,50 @@ license = { text = "apache-2.0" }
 authors = [
     { name = "jarbasai", email = "jarbasai@mailfence.com" }
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 dependencies = [
     "rapidfuzz",
     "quebra_frases",
+    "ovos-spec-tools>=1.5.0a1",
+    "ovos-utils",
 ]
 
 [project.optional-dependencies]
+ovos = [
+    "ovos-bus-client>=2.5.1a1,<3.0.0",
+    "ovos-config",
+    # opm.pipeline entrypoints + the bus-client 2.x stack need modern
+    # opm/workshop; bare floors backtrack to ancient releases that still
+    # import mycroft_bus_client and break collection.
+    "ovos-plugin-manager>=2.3.0a1,<3.0.0",
+    "ovos-utils",
+    "ovos-workshop>=2.0.1a1",
+    "langcodes",
+]
 benchmark = [
     "padaos",
-    "padacioso",
+    "fann2==1.0.7",
     "padatious",
+    "datasets",
 ]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "ovos-bus-client>=2.5.1a1,<3.0.0",
+    "ovos-config",
+    "ovos-plugin-manager>=2.3.0a1,<3.0.0",
+    "ovos-utils",
+    "ovos-workshop>=2.0.1a1",
+    "langcodes",
+]
+test = ["nebulento[dev]"]
 
 [project.urls]
 Homepage = "https://github.com/OpenJarbas/nebulento"
 
 [project.entry-points."opm.pipeline"]
 "ovos-nebulento-pipeline-plugin" = "nebulento.opm:NebulentoPipeline"
+"ovos-nebulento-hierarchical-pipeline-plugin" = "nebulento.opm:HierarchicalNebulentoPipeline"
 
 [tool.hatch.build.targets.wheel]
 packages = ["nebulento"]
