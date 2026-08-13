@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.3a1](https://github.com/OpenVoiceOS/nebulento/tree/0.10.3a1) (2026-08-13)
+
+[Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.10.2a1...0.10.3a1)
+
+**Merged pull requests:**
+
+- fix: dealias munged workshop entity names before container registration [\#48](https://github.com/OpenVoiceOS/nebulento/pull/48) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.10.2a1](https://github.com/OpenVoiceOS/nebulento/tree/0.10.2a1) (2026-08-12)
 
 [Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.10.1...0.10.2a1)
