@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "nebulento"
-version = "0.1.1a1"
+dynamic = ["version"]
 description = "dead simple fuzzy matching intent parser"
 readme = "README.md"
 license = { text = "apache-2.0" }
@@ -56,5 +56,8 @@ Homepage = "https://github.com/OpenJarbas/nebulento"
 "ovos-nebulento-pipeline-plugin" = "nebulento.opm:NebulentoPipeline"
 "ovos-nebulento-hierarchical-pipeline-plugin" = "nebulento.opm:HierarchicalNebulentoPipeline"
 
-[tool.hatch.build.targets.wheel]
-packages = ["nebulento"]
+[tool.setuptools.dynamic]
+version = {attr = "nebulento.version.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["."]
