@@ -47,7 +47,7 @@ dev = [
     "ovos-workshop>=2.0.1a1",
     "langcodes",
 ]
-test = ["nebulento[dev]"]
+test = ["nebulento[dev]", "ovoscope>=1.8.1a1"]
 
 [project.urls]
 Homepage = "https://github.com/OpenJarbas/nebulento"
