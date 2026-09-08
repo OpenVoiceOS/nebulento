@@ -94,7 +94,7 @@ class IntentContainer:
 
         ``expand_template`` (``ovos_spec_tools.expansion.expand_template``) is
         deliberately strict per OVOS-INTENT-1 §3.6 — e.g. it rejects
-        single-branch groups like ``"cansad(e)"`` as :class:`MalformedTemplate`.
+        unbalanced groups like ``"cansad(e"`` as :class:`MalformedTemplate`.
         That strictness is spec-side and must not be relaxed. The engine,
         however, must stay robust to arbitrary skill-authored templates: a
         single malformed line must never abort registration of the whole
