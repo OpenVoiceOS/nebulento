@@ -45,6 +45,7 @@ dev = [
     "ovos-plugin-manager>=2.3.0a1,<3.0.0",
     "ovos-utils",
     "ovos-workshop>=2.0.1a1",
+    "ovoscope>=1.8.5a1",
     "langcodes",
 ]
 test = ["nebulento[dev]"]
