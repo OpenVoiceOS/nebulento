@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.4a1](https://github.com/OpenVoiceOS/nebulento/tree/0.10.4a1) (2026-09-23)
+
+[Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.10.3a1...0.10.4a1)
+
+**Merged pull requests:**
+
+- fix: pass skill\_id to ovoscope helpers and fix the malformed-template fixture [\#53](https://github.com/OpenVoiceOS/nebulento/pull/53) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [0.10.3a1](https://github.com/OpenVoiceOS/nebulento/tree/0.10.3a1) (2026-08-13)
 
 [Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.10.2a1...0.10.3a1)
