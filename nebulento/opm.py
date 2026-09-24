@@ -510,9 +510,9 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
 
     def handle_detach_skill(self, message):
         skill_id = message.data["skill_id"]
-        for intent_name in [i for i in self.registered_intents if i.startswith(skill_id)]:
-            self._detach_intent(intent_name)
         skill_id_colon = skill_id + ":"
+        for intent_name in [i for i in self.registered_intents if i.startswith(skill_id_colon)]:
+            self._detach_intent(intent_name)
         for en in self.registered_entities:
             if en["name"].startswith(skill_id_colon):
                 self._detach_entity(en["name"], en.get("lang", self.lang))
