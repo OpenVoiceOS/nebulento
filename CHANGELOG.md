@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.5a1](https://github.com/OpenVoiceOS/nebulento/tree/0.10.5a1) (2026-09-24)
+
+[Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.10.4a1...0.10.5a1)
+
+**Merged pull requests:**
+
+- fix: detach\_skill removes only the owner's intents, not a prefix-sharing sibling's [\#55](https://github.com/OpenVoiceOS/nebulento/pull/55) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [0.10.4a1](https://github.com/OpenVoiceOS/nebulento/tree/0.10.4a1) (2026-09-23)
 
 [Full Changelog](https://github.com/OpenVoiceOS/nebulento/compare/0.10.3a1...0.10.4a1)
