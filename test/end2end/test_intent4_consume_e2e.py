@@ -106,7 +106,8 @@ class TestLegacyStillConsumed(_Intent4NebulentoHarness):
 
     def test_legacy_template_registration_still_matches(self):
         from ovoscope import register_padatious_intent
-        register_padatious_intent(self.bus, f"{self.SKILL_ID}:bye", _BYE)
+        register_padatious_intent(self.bus, f"{self.SKILL_ID}:bye", _BYE,
+                                  skill_id=self.SKILL_ID)
         time.sleep(0.4)
         msg = self.send_and_capture(
             "goodbye", expected_types=[f"{self.SKILL_ID}:bye"]

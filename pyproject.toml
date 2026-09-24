@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "nebulento"
-version = "0.1.1a1"
+dynamic = ["version"]
 description = "dead simple fuzzy matching intent parser"
 readme = "README.md"
 license = { text = "apache-2.0" }
@@ -15,7 +15,7 @@ requires-python = ">=3.10"
 dependencies = [
     "rapidfuzz",
     "quebra_frases",
-    "ovos-spec-tools>=1.5.0a1",
+    "ovos-spec-tools>=1.10.7a1",
     "ovos-utils",
 ]
 
@@ -46,6 +46,9 @@ dev = [
     "ovos-utils",
     "ovos-workshop>=2.0.1a1",
     "langcodes",
+    # test/test_ovoscope_e2e.py and test/end2end pass skill_id to the
+    # ovoscope helpers; 1.8.1a1 is the first release that accepts it
+    "ovoscope>=1.8.1a1",
 ]
 test = ["nebulento[dev]"]
 
@@ -56,5 +59,8 @@ Homepage = "https://github.com/OpenJarbas/nebulento"
 "ovos-nebulento-pipeline-plugin" = "nebulento.opm:NebulentoPipeline"
 "ovos-nebulento-hierarchical-pipeline-plugin" = "nebulento.opm:HierarchicalNebulentoPipeline"
 
-[tool.hatch.build.targets.wheel]
-packages = ["nebulento"]
+[tool.setuptools.dynamic]
+version = {attr = "nebulento.version.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["."]

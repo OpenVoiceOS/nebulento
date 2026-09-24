@@ -188,8 +188,11 @@ class TestNebulentoPipelineWithEntities(unittest.TestCase):
     def test_handle_detach_entity_missing_name_is_noop(self):
         """detach_entity without a name must not raise or clear the container."""
         self.pipeline.handle_detach_entity(Message("detach_entity", {}))
+        # entity names are dealiased to their bare token at the registration
+        # boundary (see _dealias_entity_name) — "skill:item" is stored as
+        # "item", matching the ``{item}`` token in the registered template.
         self.assertIn(
-            "skill:item",
+            "item",
             self.pipeline.containers["en-US"].registered_entities,
         )
 
