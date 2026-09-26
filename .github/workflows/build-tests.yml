@@ -7,8 +7,9 @@ on:
 
 jobs:
   build:
-    uses: OpenVoiceOS/gh-automations/.github/workflows/build-tests.yml@dev
+    uses: OpenVoiceOS/gh-automations/.github/workflows/build-tests.yml@ci/build-tests-runs-the-wheel
     with:
+      gh_automations_ref: ci/build-tests-runs-the-wheel
       python_versions: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
       install_extras: 'test'
       test_path: 'test/'
