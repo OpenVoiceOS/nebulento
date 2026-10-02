@@ -408,6 +408,46 @@ class TestNebulentoPipelineIntent4(unittest.TestCase):
         self.assertIn("ovos.entity.register", removed)
         self.assertIn("ovos.intent.disable", removed)
 
+    def test_register_template_missing_lang_not_indexed(self):
+        """OVOS-INTENT-4 §3.2 — a template registration omitting lang is
+        malformed. It must be skipped, not indexed under self.lang."""
+        self.pipeline.handle_register_template(Message(
+            "ovos.intent.register.template",
+            {"skill_id": "test_skill", "intent_name": "HelloIntent",
+             "samples": ["hello", "hi", "hey there"]}))
+        self.assertNotIn("test_skill:HelloIntent",
+                         self.pipeline.registered_intents)
+
+    def test_register_entity_missing_lang_not_indexed(self):
+        """OVOS-INTENT-4 §7.2 — an entity registration omitting lang is
+        malformed. It must be skipped, not indexed under self.lang."""
+        self.pipeline.handle_register_entity_spec(Message(
+            "ovos.entity.register",
+            {"skill_id": "shop_skill", "entity_name": "item",
+             "samples": ["milk", "cheese", "bread"]}))
+        self.assertNotIn(
+            "item",
+            self.pipeline.containers["en-US"].registered_entities,
+        )
+
+    def test_deregister_entity_missing_lang_removes_every_language(self):
+        """OVOS-INTENT-4 §8.3 — an omitted lang on deregister removes the
+        entity from every configured language, not only self.lang."""
+        self.pipeline.containers["pt-PT"] = self.pipeline._build_container()
+        self.pipeline.handle_register_entity_spec(_spec_register_entity_msg(
+            "shop_skill", "item", ["milk"], lang="en-US",
+        ))
+        self.pipeline.handle_register_entity_spec(_spec_register_entity_msg(
+            "shop_skill", "item", ["leite"], lang="pt-PT",
+        ))
+        self.pipeline.handle_deregister_entity_spec(Message(
+            "ovos.entity.deregister",
+            {"skill_id": "shop_skill", "entity_name": "item"}))
+        self.assertNotIn("item",
+                         self.pipeline.containers["en-US"].registered_entities)
+        self.assertNotIn("item",
+                         self.pipeline.containers["pt-PT"].registered_entities)
+
 
 def _utt_msg(utt, session=None, lang="en-US"):
     ctx = {"session": session.serialize()} if session is not None else {}
