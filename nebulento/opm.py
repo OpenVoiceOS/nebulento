@@ -401,11 +401,18 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
         carries inline ``samples`` (OVOS-INTENT-1 templates) and an optional
         per-slot ``slot_blacklist`` (OVOS-INTENT-2 §4.3) enforced at match time.
         """
-        lang = standardize_lang(message.data.get("lang", self.lang))
-        if lang not in self.containers:
-            return
         name = self._spec_label(message, "intent_name")
         if name is None:
+            return
+        lang = message.data.get("lang")
+        if not lang:
+            # INTENT-4 §3.2: lang is a required identity field. A producer
+            # that omits it gets no substitute, not self.lang.
+            LOG.warning(f"Ignoring INTENT-4 template registration for {name!r}: "
+                        f"missing lang")
+            return
+        lang = standardize_lang(lang)
+        if lang not in self.containers:
             return
         samples = message.data.get("samples")
         if not samples:
@@ -424,11 +431,19 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
 
     def handle_register_entity_spec(self, message):
         """Consume ``ovos.entity.register`` (INTENT-4 §7)."""
-        lang = standardize_lang(message.data.get("lang", self.lang))
-        if lang not in self.containers:
-            return
         name = self._spec_label(message, "entity_name")
         if name is None:
+            return
+        lang = message.data.get("lang")
+        if not lang:
+            # INTENT-4 §7.2: a registration omitting lang is malformed. Its
+            # identity is (skill_id, entity_name, lang), so it names no
+            # entity, and no substitute (self.lang or otherwise) is indexed.
+            LOG.warning(f"Ignoring INTENT-4 entity registration for {name!r}: "
+                        f"missing lang")
+            return
+        lang = standardize_lang(lang)
+        if lang not in self.containers:
             return
         samples = message.data.get("samples")
         if not samples:
@@ -456,8 +471,14 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
         name = self._spec_label(message, "entity_name")
         if name is None:
             return
-        lang = standardize_lang(message.data.get("lang", self.lang))
-        self._detach_entity(name, lang)
+        lang = message.data.get("lang")
+        if lang is None:
+            # §8.3: an omitted lang removes every language of the pair,
+            # not just self.lang.
+            for container in self.containers.values():
+                self._remove_entity(container, name)
+        else:
+            self._detach_entity(name, standardize_lang(lang))
         self.registered_entities = [
             en for en in self.registered_entities if en.get("name") != name
         ]
