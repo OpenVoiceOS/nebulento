@@ -18,6 +18,38 @@ from ovos_utils.log import LOG
 
 from nebulento import HierarchicalIntentContainer, IntentContainer, MatchStrategy
 
+# ovos-workshop's ``register_entity_file`` builds the entity name as
+# ``<skill_id>:<basename>_<md5(entity_file)>``. Nebulento's own slot-tagging
+# contract (see IntentContainer.add_entity / match_fuzzy) requires the
+# registered entity name to be the *bare* token that appears literally as
+# ``{token}`` inside the skill's own intent templates — it never carries a
+# skill_id prefix, since templates are written as e.g. ``"drive to {place}"``,
+# not ``"drive to {skill_id:place}"``. A munged (skill_id-prefixed and/or
+# hash-suffixed) registration name can therefore never satisfy the
+# ``"{" + ent + "}" in sample`` check in ``match_fuzzy``, so the entity is
+# found in the sentence but never tagged into the returned match_data —
+# the same wildcard/orphaned-slot bug class fixed for padatious in
+# ovos-padatious-pipeline-plugin#95, just with an additional (pre-existing)
+# skill_id-prefix mismatch on top of the hash suffix.
+_ENTITY_HASH_SUFFIX = re.compile(r"_[0-9a-f]{32}$")
+
+
+def _dealias_entity_name(name: Optional[str]) -> Optional[str]:
+    """Fold a (possibly skill_id-prefixed, hash-suffixed) entity
+    registration name onto the bare token nebulento's own container expects.
+
+    Collapsing here — at the registration/removal boundary this plugin owns —
+    repairs every emitter vintage, including deployed ovos-workshop releases
+    that will keep emitting the munged name.
+    """
+    if not name:
+        return name
+    if ":" in name:
+        name = name.rsplit(":", 1)[1]
+    if name.endswith(".entity"):
+        name = name[:-len(".entity")]
+    return _ENTITY_HASH_SUFFIX.sub("", name)
+
 
 class NebulentoIntent:
     """
@@ -254,7 +286,7 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
     def _add_entity(self, container: IntentContainer, name: str,
                     samples: List[str]) -> None:
         """Register entity *name* with *samples* on *container*."""
-        container.add_entity(name, samples)
+        container.add_entity(_dealias_entity_name(name), samples)
 
     def _remove_intent(self, container: IntentContainer, name: str) -> None:
         """Remove intent *name* from *container*."""
@@ -262,7 +294,7 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
 
     def _remove_entity(self, container: IntentContainer, name: str) -> None:
         """Remove entity *name* from *container*."""
-        container.remove_entity(name)
+        container.remove_entity(_dealias_entity_name(name))
 
     def _remove_skill(self, container: IntentContainer, skill_id: str) -> None:
         """Remove anything left for *skill_id* after per-intent detach.
@@ -369,11 +401,18 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
         carries inline ``samples`` (OVOS-INTENT-1 templates) and an optional
         per-slot ``slot_blacklist`` (OVOS-INTENT-2 §4.3) enforced at match time.
         """
-        lang = standardize_lang(message.data.get("lang", self.lang))
-        if lang not in self.containers:
-            return
         name = self._spec_label(message, "intent_name")
         if name is None:
+            return
+        lang = message.data.get("lang")
+        if not lang:
+            # INTENT-4 §3.2: lang is a required identity field. A producer
+            # that omits it gets no substitute, not self.lang.
+            LOG.warning(f"Ignoring INTENT-4 template registration for {name!r}: "
+                        f"missing lang")
+            return
+        lang = standardize_lang(lang)
+        if lang not in self.containers:
             return
         samples = message.data.get("samples")
         if not samples:
@@ -392,11 +431,19 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
 
     def handle_register_entity_spec(self, message):
         """Consume ``ovos.entity.register`` (INTENT-4 §7)."""
-        lang = standardize_lang(message.data.get("lang", self.lang))
-        if lang not in self.containers:
-            return
         name = self._spec_label(message, "entity_name")
         if name is None:
+            return
+        lang = message.data.get("lang")
+        if not lang:
+            # INTENT-4 §7.2: a registration omitting lang is malformed. Its
+            # identity is (skill_id, entity_name, lang), so it names no
+            # entity, and no substitute (self.lang or otherwise) is indexed.
+            LOG.warning(f"Ignoring INTENT-4 entity registration for {name!r}: "
+                        f"missing lang")
+            return
+        lang = standardize_lang(lang)
+        if lang not in self.containers:
             return
         samples = message.data.get("samples")
         if not samples:
@@ -424,8 +471,14 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
         name = self._spec_label(message, "entity_name")
         if name is None:
             return
-        lang = standardize_lang(message.data.get("lang", self.lang))
-        self._detach_entity(name, lang)
+        lang = message.data.get("lang")
+        if lang is None:
+            # §8.3: an omitted lang removes every language of the pair,
+            # not just self.lang.
+            for container in self.containers.values():
+                self._remove_entity(container, name)
+        else:
+            self._detach_entity(name, standardize_lang(lang))
         self.registered_entities = [
             en for en in self.registered_entities if en.get("name") != name
         ]
@@ -478,9 +531,9 @@ class NebulentoPipeline(ConfidenceMatcherPipeline):
 
     def handle_detach_skill(self, message):
         skill_id = message.data["skill_id"]
-        for intent_name in [i for i in self.registered_intents if i.startswith(skill_id)]:
-            self._detach_intent(intent_name)
         skill_id_colon = skill_id + ":"
+        for intent_name in [i for i in self.registered_intents if i.startswith(skill_id_colon)]:
+            self._detach_intent(intent_name)
         for en in self.registered_entities:
             if en["name"].startswith(skill_id_colon):
                 self._detach_entity(en["name"], en.get("lang", self.lang))
@@ -600,7 +653,8 @@ class HierarchicalNebulentoPipeline(NebulentoPipeline):
 
     def _add_entity(self, container: HierarchicalIntentContainer, name: str,
                     samples: List[str]) -> None:
-        container.register_domain_entity(self._domain_of(name), name, samples)
+        container.register_domain_entity(self._domain_of(name),
+                                         _dealias_entity_name(name), samples)
 
     def _remove_intent(self, container: HierarchicalIntentContainer,
                        name: str) -> None:
@@ -608,7 +662,8 @@ class HierarchicalNebulentoPipeline(NebulentoPipeline):
 
     def _remove_entity(self, container: HierarchicalIntentContainer,
                        name: str) -> None:
-        container.remove_domain_entity(self._domain_of(name), name)
+        container.remove_domain_entity(self._domain_of(name),
+                                       _dealias_entity_name(name))
 
     def _remove_skill(self, container: HierarchicalIntentContainer,
                       skill_id: str) -> None:

@@ -46,10 +46,12 @@ class _NebulentoHarness(E2EPipelineHarness):
     pipeline: NebulentoPipeline  # type: ignore[assignment]
 
     def _register_intent(self, name, samples):
-        register_padatious_intent(self.bus, name, samples)
+        register_padatious_intent(self.bus, name, samples,
+                                  skill_id=self.SKILL_ID)
 
     def _register_entity(self, name, samples):
-        register_padatious_entity(self.bus, name, samples)
+        register_padatious_entity(self.bus, name, samples,
+                                  skill_id=self.SKILL_ID)
 
 
 class TestRegisteredIntentMatch(_NebulentoHarness):
@@ -87,7 +89,8 @@ class TestDetach(_NebulentoHarness):
         msg = self.send_and_capture("hello", expected_types=[f"{self.SKILL_ID}:hello"])
         self.assertIsNotNone(msg)
 
-        detach_intent(self.bus, f"{self.SKILL_ID}:hello")
+        detach_intent(self.bus, f"{self.SKILL_ID}:hello",
+                      skill_id=self.SKILL_ID)
         self.expect_no_match("hello")
 
     def test_detach_skill_removes_all_its_intents(self):
@@ -146,7 +149,8 @@ class _HierarchicalNebulentoHarness(E2EPipelineHarness):
     SKILL_ID = "media_skill_nebulento"
 
     def _register_intent(self, name, samples):
-        register_padatious_intent(self.bus, name, samples)
+        register_padatious_intent(self.bus, name, samples,
+                                  skill_id=self.SKILL_ID)
 
 
 class TestHierarchicalRouting(_HierarchicalNebulentoHarness):
